@@ -131,6 +131,10 @@ do_install() {
         ./ "$DEPLOY_DIR/"
     chown -R "$DEPLOY_USER:$DEPLOY_GROUP" "$DEPLOY_DIR"
 
+    # Cartella log richiesta dall'hardening systemd (ReadWritePaths=/opt/.../logs)
+    mkdir -p "$DEPLOY_DIR/logs"
+    chown "$DEPLOY_USER:$DEPLOY_GROUP" "$DEPLOY_DIR/logs"
+
     echo "[install] Installazione dipendenze Node (--production)..."
     (cd "$DEPLOY_DIR" && npm install --production)
 
@@ -233,6 +237,10 @@ do_service() {
     sed -i "s|^Group=.*|Group=$DEPLOY_GROUP|" "$SERVICE_DST"
     sed -i "s|^WorkingDirectory=.*|WorkingDirectory=$DEPLOY_DIR|" "$SERVICE_DST"
     sed -i "s|^EnvironmentFile=.*|EnvironmentFile=$ENV_FILE|" "$SERVICE_DST"
+
+    # Assicura la cartella log (ReadWritePaths dell'hardening) prima di avviare
+    mkdir -p "$DEPLOY_DIR/logs"
+    chown "$DEPLOY_USER:$DEPLOY_GROUP" "$DEPLOY_DIR/logs"
 
     systemctl daemon-reload
     systemctl enable --now parole-mutanti
