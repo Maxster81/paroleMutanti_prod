@@ -196,12 +196,14 @@ do_db() {
         exit 1
     fi
 
-    # Carica DATABASE_URL dal file env di produzione
-    set -a; . "$ENV_FILE"; set +a
-    if [ -z "${DATABASE_URL:-}" ]; then
+    # Legge DATABASE_URL dal file env (senza fare source dell'intero file:
+    # il .env può contenere righe che bash non sa interpretare).
+    DATABASE_URL="$(grep -E '^DATABASE_URL=' "$ENV_FILE" | head -1 | cut -d= -f2- | tr -d '\r')"
+    if [ -z "$DATABASE_URL" ]; then
         echo "ERRORE: DATABASE_URL mancante in $ENV_FILE" >&2
         exit 1
     fi
+    export DATABASE_URL
 
     # Estrae la password dall'URL (postgresql://user:PASS@host/db)
     DB_PASSWORD="$(printf '%s' "$DATABASE_URL" | sed -E 's|^[^:]+://[^:]+:([^@]+)@.*|\1|')"

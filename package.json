@@ -1,6 +1,6 @@
 {
   "name": "parole-mutanti",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "Gioco multiplayer realtime di modifica parole italiane",
   "type": "module",
   "main": "backend/src/server.js",

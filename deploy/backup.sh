@@ -26,15 +26,15 @@ if [ ! -f "$ENV_FILE" ]; then
     exit 1
 fi
 
-# Carica le variabili (DATABASE_URL) dal file env di produzione
-set -a
-. "$ENV_FILE"
-set +a
+# Legge DATABASE_URL dal file env (senza fare source dell'intero file:
+# il .env può contenere righe che bash non sa interpretare).
+DATABASE_URL="$(grep -E '^DATABASE_URL=' "$ENV_FILE" | head -1 | cut -d= -f2- | tr -d '\r')"
 
-if [ -z "${DATABASE_URL:-}" ]; then
+if [ -z "$DATABASE_URL" ]; then
     echo "[backup] ERRORE: DATABASE_URL mancante in $ENV_FILE" >&2
     exit 1
 fi
+export DATABASE_URL
 
 mkdir -p "$BACKUP_DIR"
 chmod 700 "$BACKUP_DIR"
