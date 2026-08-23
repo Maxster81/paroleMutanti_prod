@@ -151,6 +151,14 @@ do_env() {
 
     if [ -f "$ENV_FILE" ]; then
         echo "[env] $ENV_FILE già presente. Lo lascio invariato (usa --env-file per un altro path)."
+        # Robustezza: se SESSION_SECRET è placeholder/corto, lo rigenera (altrimenti
+        # il config in produzione rifiuta di partire).
+        CURRENT_SECRET="$(grep -E '^SESSION_SECRET=' "$ENV_FILE" | head -1 | cut -d= -f2- | tr -d '\r')"
+        if [ "${#CURRENT_SECRET}" -lt 32 ]; then
+            NEW_SECRET="$(openssl rand -hex 32)"
+            sed -i "s|^SESSION_SECRET=.*|SESSION_SECRET=$NEW_SECRET|" "$ENV_FILE"
+            echo "[env] SESSION_SECRET non valido: rigenerato automaticamente."
+        fi
         return
     fi
 
