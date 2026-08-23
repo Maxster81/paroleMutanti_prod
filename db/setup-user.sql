@@ -20,7 +20,7 @@ DROP USER IF EXISTS parole_user;
 -- NOTA: psql NON sostituisce le variabili dentro $$...$$, quindi il CREATE USER
 -- è fatto a livello top-level usando :'my_password' (sostituito da psql).
 \if :{?db_password}
-  \set my_password :'db_password'
+  \set my_password :db_password
 \else
   \set my_password `openssl rand -hex 18`
   \echo '🔑 Nessuna password fornita: generata automaticamente.'
