@@ -18,6 +18,9 @@
 #   sudo ./deploy.sh --env-file /etc/parole-mutanti.env  # env personalizzato
 #   sudo ./deploy.sh --help                           # aiuto
 #
+#   Il deploy completo (senza flag) include anche l'installazione del
+#   backup automatico del DB (cron notturno alle 3:00, rotazione ultimi 7).
+#
 # Prerequisiti:
 #   - Ubuntu con systemd
 #   - Run come root (sudo)
@@ -43,6 +46,7 @@ ENV_MODE=0
 SERVICE_MODE=0
 CADDY_MODE=0
 UPDATE_MODE=0
+BACKUP_MODE=0
 HELP_MODE=0
 
 # --- Parsing argomenti -------------------------------------------------------
@@ -78,7 +82,7 @@ fi
 # Se nessuna modalità esplicita, esegui il deploy completo
 if [ "$INSTALL_MODE" = "0" ] && [ "$ENV_MODE" = "0" ] && [ "$SERVICE_MODE" = "0" ] \
    && [ "$CADDY_MODE" = "0" ] && [ "$UPDATE_MODE" = "0" ]; then
-    INSTALL_MODE=1; ENV_MODE=1; SERVICE_MODE=1
+    INSTALL_MODE=1; ENV_MODE=1; SERVICE_MODE=1; BACKUP_MODE=1
     if [ -n "$DOMAIN" ]; then CADDY_MODE=1; fi
 fi
 
@@ -224,12 +228,44 @@ do_update() {
     echo "[update] FATTO."
 }
 
+# ============================================================
+# backup : installa script di backup + cron (nel deploy completo)
+# ============================================================
+do_backup() {
+    require_root
+    if [ ! -f "$ENV_FILE" ]; then
+        echo "[backup] AVVISO: $ENV_FILE non presente, salto installazione backup." >&2
+        return
+    fi
+    if [ ! -f deploy/backup.sh ]; then
+        echo "[backup] ERRORE: deploy/backup.sh non trovato nel repo" >&2
+        exit 1
+    fi
+
+    echo "[backup] Installazione script + cron (ogni notte alle 3:00, rotazione 7)..."
+    mkdir -p "$DEPLOY_DIR/deploy" "$DEPLOY_DIR/backups"
+    chmod 700 "$DEPLOY_DIR/backups"
+    cp deploy/backup.sh "$DEPLOY_DIR/deploy/backup.sh"
+    chmod 700 "$DEPLOY_DIR/deploy/backup.sh"
+
+    cat > /etc/cron.d/parole-mutanti-backup <<EOF
+# Backup automatico Parole Mutanti — ogni notte alle 3:00, mantiene gli ultimi 7
+0 3 * * * root PAROLE_ENV_FILE=$ENV_FILE PAROLE_BACKUP_DIR=$DEPLOY_DIR/backups $DEPLOY_DIR/deploy/backup.sh
+EOF
+    chmod 644 /etc/cron.d/parole-mutanti-backup
+
+    echo "[backup] Primo backup di verifica..."
+    PAROLE_ENV_FILE="$ENV_FILE" PAROLE_BACKUP_DIR="$DEPLOY_DIR/backups" "$DEPLOY_DIR/deploy/backup.sh"
+    echo "[backup] FATTO."
+}
+
 # --- Esecuzione --------------------------------------------------------------
 if [ "$INSTALL_MODE" = "1" ]; then do_install; fi
 if [ "$ENV_MODE" = "1" ]; then do_env; fi
 if [ "$SERVICE_MODE" = "1" ]; then do_service; fi
 if [ "$CADDY_MODE" = "1" ]; then do_caddy; fi
 if [ "$UPDATE_MODE" = "1" ]; then do_update; fi
+if [ "$BACKUP_MODE" = "1" ]; then do_backup; fi
 
 echo
 echo "[deploy] Verifica finale:"
