@@ -1,0 +1,198 @@
+/* ===========================================
+   base.css — Reset, variabili CSS, tipografia
+   Mobile-first 360x800
+   =========================================== */
+
+/* --- Reset minimale --- */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--bg);
+  color: var(--text);
+  transition: background-color 0.2s, color 0.2s;
+}
+
+input, button, textarea, select {
+  font: inherit;
+  color: inherit;
+}
+
+/* --- Variabili tema dark (default) --- */
+:root,
+:root[data-theme="dark"] {
+  --bg: #0f0f1e;
+  --bg-elevated: #1a1a2e;
+  --bg-card: #16213e;
+  --text: #e8e8e8;
+  --text-muted: #a0a0b0;
+  --text-dim: #6c6c7c;
+  --primary: #16c79a;
+  --primary-hover: #14b389;
+  --primary-text: #0f0f1e;
+  --danger: #e94560;
+  --warning: #f5a623;
+  --border: #2a2a4e;
+  --shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --radius: 12px;
+  --radius-sm: 8px;
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-md: 1rem;
+  --font-size-lg: 1.25rem;
+  --font-size-xl: 1.75rem;
+  --font-size-xxl: 2.25rem;
+  --spacing-xs: 0.25rem;
+  --spacing-sm: 0.5rem;
+  --spacing-md: 1rem;
+  --spacing-lg: 1.5rem;
+  --spacing-xl: 2rem;
+  --spacing-xxl: 3rem;
+}
+
+/* --- Variabili tema light --- */
+:root[data-theme="light"] {
+  --bg: #f8f9fa;
+  --bg-elevated: #ffffff;
+  --bg-card: #ffffff;
+  --text: #1a1a2e;
+  --text-muted: #6c6c7c;
+  --text-dim: #a0a0b0;
+  --primary: #16c79a;
+  --primary-hover: #14b389;
+  --primary-text: #ffffff;
+  --danger: #dc3545;
+  --warning: #f5a623;
+  --border: #e0e0e8;
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+/* --- Layout principale --- */
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-md) var(--spacing-md);
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+
+.app-logo {
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  color: var(--primary);
+  letter-spacing: -0.01em;
+}
+
+.app-status {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.app-main {
+  flex: 1;
+  padding: var(--spacing-md);
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+/* --- Loading --- */
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+}
+
+/* --- Tipografia --- */
+h1, h2, h3, h4 {
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+h1 { font-size: var(--font-size-xl); }
+h2 { font-size: var(--font-size-lg); }
+h3 { font-size: var(--font-size-md); }
+
+p { margin-bottom: var(--spacing-md); }
+
+a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+a:active { opacity: 0.7; }
+
+.text-muted { color: var(--text-muted); }
+.text-dim { color: var(--text-dim); }
+.text-small { font-size: var(--font-size-sm); }
+.text-center { text-align: center; }
+
+/* --- Status connessione --- */
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  transition: background-color 0.2s;
+}
+.status-offline { background: var(--danger); }
+.status-online { background: var(--primary); box-shadow: 0 0 8px var(--primary); }
+.status-connecting { background: var(--warning); animation: pulse 1s infinite; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* --- Icon buttons (header) --- */
+.icon-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--radius-sm);
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: background-color 0.15s, transform 0.1s;
+  min-width: 38px;
+  min-height: 38px;
+}
+
+.icon-btn:active {
+  transform: scale(0.92);
+  background: var(--bg-card);
+}
+
+.icon-btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}

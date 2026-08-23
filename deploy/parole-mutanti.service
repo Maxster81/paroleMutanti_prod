@@ -1,0 +1,54 @@
+# =====================================================================
+# parole-mutanti.service — Systemd unit per "Parole Mutanti" in produzione
+# =====================================================================
+# DA COPIARE in /etc/systemd/system/parole-mutanti.service sul server Ubuntu.
+# Esegui:
+#   sudo cp deploy/parole-mutanti.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now parole-mutanti
+#   sudo systemctl status parole-mutanti
+# =====================================================================
+
+[Unit]
+Description=Parole Mutanti — gioco multiplayer realtime
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+# User dedicato (da creare con: sudo useradd -r -s /usr/sbin/nologin parole-mutanti)
+User=parole-mutanti
+Group=parole-mutanti
+WorkingDirectory=/opt/paroleMutanti
+# La porta di ascolto è quella in PORT (dall'EnvironmentFile).
+# In produzione impostare HOST=127.0.0.1 (il reverse proxy Caddy sta davanti).
+EnvironmentFile=/etc/parole-mutanti/.env
+ExecStart=/usr/bin/node backend/src/server.js
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=parole-mutanti
+
+# Sicurezza
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/paroleMutanti/logs
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+# Limiti risorse
+LimitNOFILE=65536
+LimitNPROC=4096
+MemoryMax=512M
+CPUQuota=80%
+
+# Timeout avvio
+TimeoutStartSec=30
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

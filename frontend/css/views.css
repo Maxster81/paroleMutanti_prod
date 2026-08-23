@@ -1,0 +1,254 @@
+/* ===========================================
+   views.css — Stili specifici per ogni view
+   =========================================== */
+
+/* --- Home view --- */
+.home-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-height: calc(100vh - 80px);
+  padding: var(--spacing-lg);
+  gap: var(--spacing-lg);
+}
+
+.home-list-card {
+  width: 100%;
+  max-width: 360px;
+  text-align: left;
+}
+
+.home-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-sm);
+}
+
+.home-list-title {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.home-list-meta {
+  font-size: var(--font-size-xs);
+  color: var(--text-dim);
+}
+
+.home-list-body .player-card {
+  margin-bottom: var(--spacing-xs);
+}
+
+.home-list-body .empty {
+  padding: var(--spacing-md);
+}
+
+.home-guide-card {
+  width: 100%;
+  max-width: 360px;
+  text-align: left;
+}
+
+.home-guide-title {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--spacing-sm);
+}
+
+.home-guide-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  padding-left: var(--spacing-md);
+  font-size: var(--font-size-sm);
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.home-guide-list li {
+  margin-bottom: 0;
+}
+
+.home-hero {
+  font-size: var(--font-size-xxl);
+  font-weight: 700;
+  color: var(--primary);
+  margin-bottom: var(--spacing-sm);
+  letter-spacing: -0.02em;
+}
+
+.home-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  width: 100%;
+  max-width: 360px;
+}
+
+.home-divider {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  max-width: 360px;
+  color: var(--text-dim);
+  font-size: var(--font-size-sm);
+  gap: var(--spacing-md);
+}
+
+.home-divider::before,
+.home-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* --- Form view (create/join) --- */
+.form-view {
+  max-width: 480px;
+  margin: 0 auto;
+  padding-top: var(--spacing-md);
+}
+
+.form-view-header {
+  margin-bottom: var(--spacing-lg);
+}
+
+.form-view-title {
+  font-size: var(--font-size-xl);
+  margin-bottom: var(--spacing-xs);
+}
+
+.form-view-subtitle {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.form-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-lg);
+}
+
+/* --- Lobby view --- */
+.lobby-view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.lobby-header {
+  text-align: center;
+  margin-bottom: var(--spacing-md);
+}
+
+.lobby-code {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+  margin-bottom: var(--spacing-xs);
+}
+
+.lobby-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-sm);
+}
+
+.players-list {
+  margin-bottom: var(--spacing-md);
+}
+
+.players-list-title {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+  margin-bottom: var(--spacing-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* --- End view --- */
+.end-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-height: calc(100vh - 80px);
+  padding: var(--spacing-lg);
+  gap: var(--spacing-md);
+}
+
+.end-trophy {
+  font-size: 4rem;
+  animation: endPop 0.5s ease-out;
+}
+
+.end-title {
+  font-size: var(--font-size-xxl);
+  color: var(--primary);
+}
+
+.end-subtitle {
+  margin-bottom: var(--spacing-sm);
+}
+
+.end-stats {
+  display: flex;
+  justify-content: space-around;
+  width: 100%;
+  max-width: 360px;
+  text-align: center;
+}
+
+.end-stat {
+  flex: 1;
+}
+
+.end-stat-value {
+  font-size: var(--font-size-xl);
+  font-weight: 700;
+  color: var(--text);
+}
+
+.end-stat-label {
+  font-size: var(--font-size-xs);
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.end-view .form-actions {
+  width: 100%;
+  max-width: 360px;
+}
+
+@keyframes endPop {
+  0% { transform: scale(0.5); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* --- Responsive (tablet/desktop) --- */
+@media (min-width: 600px) {
+  .home-actions {
+    flex-direction: row;
+    max-width: 600px;
+  }
+  .home-divider { display: none; }
+  .form-row { grid-template-columns: 1fr 1fr; }
+}
+
+@media (min-width: 900px) {
+  .app-main {
+    max-width: 720px;
+    margin: 0 auto;
+  }
+}

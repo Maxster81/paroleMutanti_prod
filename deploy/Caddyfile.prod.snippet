@@ -1,0 +1,72 @@
+# =====================================================================
+# Caddyfile.prod.snippet — Blocco Caddy per produzione Ubuntu
+# =====================================================================
+# TEMPLATE con placeholder. deploy/deploy.sh sostituisce __DOMAIN__ e __PORT__
+# con i valori reali (oppure sostituiscili a mano prima dell'uso).
+# DA COPIARE/INCOLLARE nel /etc/caddy/Caddyfile del server di produzione.
+# NON sostituisce il Caddyfile esistente: aggiunge un NUOVO host block.
+#
+# Hostname previsto: __DOMAIN__
+# Porta interna:     __PORT__ (dove gira il backend Node)
+# TLS:               Let's Encrypt automatico (Cloudflare proxy o cert custom)
+# =====================================================================
+
+# --- Blocco principale: __DOMAIN__ (HTTPS automatico) ---
+__DOMAIN__ {
+    # Compressione gzip
+    encode gzip zstd
+
+    # Headers sicurezza
+    header {
+        # Protezione XSS / MIME sniffing
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        # CSP per vanilla JS (aggiungere domini se servono asset esterni)
+        Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' wss:; font-src 'self'"
+        # HSTS (solo in HTTPS)
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    }
+
+    # Log dedicato (opzionale: richiede che la cartella esista e permessi corretti)
+    log {
+        output file /var/log/caddy/parole-mutanti.log {
+            roll_size 10mb
+            roll_keep 5
+        }
+    }
+
+    # Reverse proxy al backend Node
+    # IMPORTANTE: header Connection chiuso e buffering disattivato per WebSocket
+    reverse_proxy 127.0.0.1:__PORT__ {
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        header_up X-Forwarded-Proto {scheme}
+
+        # Timeout più lunghi per WebSocket
+        transport http {
+            dial_timeout 5s
+            response_header_timeout 30s
+        }
+    }
+}
+
+# --- (Opzionale) Blocco di fallback HTTP->HTTPS ---
+# Decommentare se vuoi forzare redirect da http a https
+# http://__DOMAIN__ {
+#     redir https://__DOMAIN__{uri} permanent
+# }
+
+# =====================================================================
+# Note di deploy per Ubuntu:
+#
+# 1) Sostituisci __DOMAIN__ e __PORT__ (es. via deploy/deploy.sh)
+# 2) Salva questo snippet in /etc/caddy/Caddyfile (o mergialo con il tuo esistente)
+# 3) Crea la cartella log: sudo mkdir -p /var/log/caddy && sudo chown caddy:caddy /var/log/caddy
+# 4) Testa config: sudo caddy validate --config /etc/caddy/Caddyfile
+# 5) Ricarica: sudo systemctl reload caddy
+#
+# DNS: il dominio __DOMAIN__ deve puntare all'IP del server.
+# Se usi Cloudflare, abilita proxy e imposta SSL = Full (strict).
+# =====================================================================

@@ -1,0 +1,67 @@
+# =====================================================================
+# .gitignore — Parole Mutanti
+# =====================================================================
+
+# Variabili d'ambiente (contengono segreti, MAI committare)
+.env
+.env.local
+.env.production
+*.env.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Dipendenze Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnp
+.pnp.js
+
+# Build / cache
+dist/
+build/
+.cache/
+.parcel-cache/
+.next/
+.nuxt/
+.vite/
+coverage/
+
+# File temporanei IDE / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Dump / import temporanei
+db/data/
+db/dumps/
+*.sql.gz
+*.dump
+
+# Stato update dizionari (ETag salvati da check-update.mjs)
+db/.last-*
+
+# Certificati locali / chiavi
+*.pem
+*.key
+*.crt
+deploy/certs/
+
+# Audio assets locali (se in futuro aggiunti)
+frontend/assets/audio/*.tmp
+
+# File di stato Cline
+.clinerules.local
+
+# Marker locale di sincronizzazione (sync-to-prod.sh, NON committare)
+.last-sync-dev-commit

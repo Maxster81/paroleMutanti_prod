@@ -1,0 +1,47 @@
+{
+  "name": "parole-mutanti",
+  "version": "1.0.0",
+  "description": "Gioco multiplayer realtime di modifica parole italiane",
+  "type": "module",
+  "main": "backend/src/server.js",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "start": "node backend/src/server.js",
+    "dev": "node --watch backend/src/server.js",
+    "test": "node --test \"backend/tests/*.test.js\"",
+    "db:init": "node db/init-db.js",
+    "db:reset": "node db/reset-db.js",
+    "db:check": "node db/check-db.js",
+    "db:import:lo": "node db/import-lo-dict.mjs",
+    "db:import:hf": "node db/import-hf-dict.mjs",
+    "db:import": "npm run db:import:lo && npm run db:import:hf",
+    "db:check-update": "node db/check-update.mjs",
+    "db:update": "node db/update-lo.mjs",
+    "db:setup": "npm run db:reset && npm run db:import"
+  },
+  "keywords": [
+    "game",
+    "multiplayer",
+    "italian",
+    "words",
+    "socket.io",
+    "realtime"
+  ],
+  "author": "Parole Mutanti",
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "levenshtein": "^1.0.5",
+    "pg": "^8.13.1",
+    "socket.io": "^4.8.1",
+    "uuid": "^11.0.5",
+    "yauzl": "^3.4.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9",
+    "socket.io-client": "^4.8.3"
+  }
+}

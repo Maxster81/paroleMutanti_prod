@@ -1,0 +1,237 @@
+#!/usr/bin/env bash
+# =============================================================================
+# Parole Mutanti — script di deploy ed update su Ubuntu
+# =============================================================================
+# Automatizza installazione e configurazione di "Parole Mutanti" su Ubuntu con
+# systemd + PostgreSQL + Caddy. È OPZIONALE e flessibile: puoi eseguire tutto,
+# singoli passi, oppure seguire manualmente il README.
+#
+# Utilizzo (dalla root del repo clonato, come root/sudo):
+#   sudo ./deploy.sh                                  # deploy completo
+#   sudo ./deploy.sh --install                        # solo installazione (codice + dipendenze + DB)
+#   sudo ./deploy.sh --env                            # solo creazione file env (se assente)
+#   sudo ./deploy.sh --service                        # solo installazione/avvio servizio systemd
+#   sudo ./deploy.sh --caddy                          # solo generazione/ricarica blocco Caddy
+#   sudo ./deploy.sh --update                         # aggiornamento in-place
+#   sudo ./deploy.sh --domain esempio.it --port 8090  # parametri Caddy/porta
+#   sudo ./deploy.sh --dir /opt/paroleMutanti         # directory installazione personalizzata
+#   sudo ./deploy.sh --env-file /etc/parole-mutanti.env  # env personalizzato
+#   sudo ./deploy.sh --help                           # aiuto
+#
+# Prerequisiti:
+#   - Ubuntu con systemd
+#   - Run come root (sudo)
+#   - Git repo clonato nella directory corrente
+# =============================================================================
+set -euo pipefail
+
+APP_NAME="parole-mutanti"
+DEPLOY_USER="parole-mutanti"
+DEPLOY_GROUP="parole-mutanti"
+DEPLOY_DIR="/opt/paroleMutanti"
+ENV_FILE="/etc/parole-mutanti/.env"
+SERVICE_SRC="deploy/parole-mutanti.service"
+SERVICE_DST="/etc/systemd/system/parole-mutanti.service"
+CADDYFILE_SRC="deploy/Caddyfile.prod.snippet"
+
+# Parametri (overridabili)
+PORT="8090"
+DOMAIN=""
+
+INSTALL_MODE=0
+ENV_MODE=0
+SERVICE_MODE=0
+CADDY_MODE=0
+UPDATE_MODE=0
+HELP_MODE=0
+
+# --- Parsing argomenti -------------------------------------------------------
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --install) INSTALL_MODE=1; shift ;;
+        --env) ENV_MODE=1; shift ;;
+        --service) SERVICE_MODE=1; shift ;;
+        --caddy) CADDY_MODE=1; shift ;;
+        --update) UPDATE_MODE=1; shift ;;
+        --help|-h) HELP_MODE=1; shift ;;
+        --domain)
+            [[ -z "${2:-}" || "$2" == --* ]] && { echo "ERRORE: --domain richiede un valore" >&2; exit 1; }
+            DOMAIN="$2"; shift 2 ;;
+        --port)
+            [[ -z "${2:-}" || "$2" == --* ]] && { echo "ERRORE: --port richiede un valore" >&2; exit 1; }
+            PORT="$2"; shift 2 ;;
+        --dir)
+            [[ -z "${2:-}" || "$2" == --* ]] && { echo "ERRORE: --dir richiede un path" >&2; exit 1; }
+            DEPLOY_DIR="$2"; shift 2 ;;
+        --env-file)
+            [[ -z "${2:-}" || "$2" == --* ]] && { echo "ERRORE: --env-file richiede un path" >&2; exit 1; }
+            ENV_FILE="$2"; shift 2 ;;
+        *) echo "Opzione sconosciuta: $1 (usa --help)" >&2; exit 1 ;;
+    esac
+done
+
+if [ "$HELP_MODE" = "1" ]; then
+    sed -n '1,30p' "$0" | sed 's/^# \{0,1\}//'
+    exit 0
+fi
+
+# Se nessuna modalità esplicita, esegui il deploy completo
+if [ "$INSTALL_MODE" = "0" ] && [ "$ENV_MODE" = "0" ] && [ "$SERVICE_MODE" = "0" ] \
+   && [ "$CADDY_MODE" = "0" ] && [ "$UPDATE_MODE" = "0" ]; then
+    INSTALL_MODE=1; ENV_MODE=1; SERVICE_MODE=1
+    if [ -n "$DOMAIN" ]; then CADDY_MODE=1; fi
+fi
+
+require_root() {
+    if [ "$(id -u)" -ne 0 ]; then
+        echo "ERRORE: esegui con sudo/root" >&2; exit 1
+    fi
+}
+
+# ============================================================
+# --install : pacchetti + copia codice + dipendenze + DB
+# ============================================================
+do_install() {
+    require_root
+    echo "[install] Installazione pacchetti di sistema (nodejs, git, postgresql, caddy)..."
+    apt-get update
+    apt-get install -y nodejs npm git postgresql postgresql-contrib caddy
+
+    echo "[install] Creazione utente dedicato ($DEPLOY_USER)..."
+    id "$DEPLOY_USER" &>/dev/null || useradd -r -s /usr/sbin/nologin "$DEPLOY_USER"
+
+    echo "[install] Copia del codice in $DEPLOY_DIR ..."
+    mkdir -p "$DEPLOY_DIR"
+    rsync -a --delete \
+        --include='backend/' --include='backend/src/' --include='backend/src/***' \
+        --include='frontend/' --include='frontend/***' \
+        --include='db/' --include='db/***' \
+        --include='deploy/' --include='deploy/***' \
+        --include='package.json' --include='package-lock.json' \
+        --include='.env.example' --include='.gitignore' \
+        --include='README.md' --include='VERSION' \
+        --exclude='*' \
+        ./ "$DEPLOY_DIR/"
+    chown -R "$DEPLOY_USER:$DEPLOY_GROUP" "$DEPLOY_DIR"
+
+    echo "[install] Installazione dipendenze Node (--production)..."
+    (cd "$DEPLOY_DIR" && npm install --production)
+
+    echo "[install] Setup database (utente/DB + schema + dizionario)..."
+    echo "  -> verranno eseguiti: db/setup-user.sql, npm run db:init, npm run db:import"
+    (cd "$DEPLOY_DIR" && sudo -u postgres psql -f db/setup-user.sql)
+    (cd "$DEPLOY_DIR" && npm run db:init)
+    (cd "$DEPLOY_DIR" && npm run db:import)
+
+    echo "[install] FATTO. Ora imposta le credenziali con: sudo $0 --env"
+}
+
+# ============================================================
+# --env : crea/genera il file env di produzione
+# ============================================================
+do_env() {
+    require_root
+    ENV_DIR="$(dirname "$ENV_FILE")"
+    mkdir -p "$ENV_DIR"
+
+    if [ -f "$ENV_FILE" ]; then
+        echo "[env] $ENV_FILE già presente. Lo lascio invariato (usa --env-file per un altro path)."
+        return
+    fi
+
+    echo "[env] Generazione $ENV_FILE da .env.example..."
+    cp .env.example "$ENV_FILE"
+
+    # Valori che l'utente DEVE fornire (da env o prompt)
+    DATABASE_URL="${PAROLE_DATABASE_URL:-}"
+    DEEPSEEK_KEY="${PAROLE_DEEPSEEK_KEY:-}"
+    if [ -z "$DATABASE_URL" ]; then
+        read -rp "DATABASE_URL (es. postgresql://parole_user:PASS@localhost:5432/parole_mutanti): " DATABASE_URL
+    fi
+    if [ -z "$DEEPSEEK_KEY" ]; then
+        read -rp "DEEPSEEK_API_KEY (lascia vuoto per disattivare il fallback AI): " DEEPSEEK_KEY
+    fi
+
+    SECRET="$(openssl rand -hex 32)"
+
+    # Sovrascrive i valori nel file env
+    sed -i "s|^PORT=.*|PORT=$PORT|" "$ENV_FILE"
+    sed -i "s|^NODE_ENV=.*|NODE_ENV=production|" "$ENV_FILE"
+    sed -i "s|^HOST=.*|HOST=127.0.0.1|" "$ENV_FILE"
+    sed -i "s|^DATABASE_URL=.*|DATABASE_URL=$DATABASE_URL|" "$ENV_FILE"
+    sed -i "s|^DEEPSEEK_API_KEY=.*|DEEPSEEK_API_KEY=$DEEPSEEK_KEY|" "$ENV_FILE"
+    sed -i "s|^SESSION_SECRET=.*|SESSION_SECRET=$SECRET|" "$ENV_FILE"
+
+    chmod 600 "$ENV_FILE"
+    chown root:"$DEPLOY_GROUP" "$ENV_FILE"
+    echo "[env] FATTO. Credenziali in $ENV_FILE (permessi 600)."
+    echo "  -> Aggiorna la riga HOST/PORT se necessario e configura CORS_ORIGIN col tuo dominio."
+}
+
+# ============================================================
+# --service : unit systemd
+# ============================================================
+do_service() {
+    require_root
+    echo "[service] Copia della unit systemd..."
+    cp "$SERVICE_SRC" "$SERVICE_DST"
+
+    # Allinea user/dir nella unit con i parametri scelti
+    sed -i "s|^User=.*|User=$DEPLOY_USER|" "$SERVICE_DST"
+    sed -i "s|^Group=.*|Group=$DEPLOY_GROUP|" "$SERVICE_DST"
+    sed -i "s|^WorkingDirectory=.*|WorkingDirectory=$DEPLOY_DIR|" "$SERVICE_DST"
+    sed -i "s|^EnvironmentFile=.*|EnvironmentFile=$ENV_FILE|" "$SERVICE_DST"
+
+    systemctl daemon-reload
+    systemctl enable --now parole-mutanti
+    systemctl status parole-mutanti --no-pager
+    echo "[service] FATTO."
+}
+
+# ============================================================
+# --caddy : genera il blocco Caddy dal template
+# ============================================================
+do_caddy() {
+    require_root
+    if [ -z "$DOMAIN" ]; then
+        echo "ERRORE: --caddy richiede --domain <dominio>" >&2; exit 1
+    fi
+
+    echo "[caddy] Generazione blocco per $DOMAIN sulla porta $PORT..."
+    sed -e "s|__DOMAIN__|$DOMAIN|g" -e "s|__PORT__|$PORT|g" "$CADDYFILE_SRC" \
+        > /tmp/parole-mutanti-caddy.block
+
+    mkdir -p /var/log/caddy
+    chown caddy:caddy /var/log/caddy
+
+    echo "[caddy] Il blocco è in /tmp/parole-mutanti-caddy.block"
+    echo "  -> Incollalo nel tuo /etc/caddy/Caddyfile, poi:"
+    echo "     sudo caddy validate --config /etc/caddy/Caddyfile"
+    echo "     sudo systemctl reload caddy"
+    echo "  (Per un merge automatico valuta un Caddyfile modulare con import.)"
+    echo "[caddy] FATTO."
+}
+
+# ============================================================
+# --update : aggiornamento in-place
+# ============================================================
+do_update() {
+    require_root
+    echo "[update] git pull + npm install --production + restart..."
+    (cd "$DEPLOY_DIR" && git pull --ff-only)
+    (cd "$DEPLOY_DIR" && npm install --production)
+    systemctl restart parole-mutanti
+    echo "[update] FATTO."
+}
+
+# --- Esecuzione --------------------------------------------------------------
+if [ "$INSTALL_MODE" = "1" ]; then do_install; fi
+if [ "$ENV_MODE" = "1" ]; then do_env; fi
+if [ "$SERVICE_MODE" = "1" ]; then do_service; fi
+if [ "$CADDY_MODE" = "1" ]; then do_caddy; fi
+if [ "$UPDATE_MODE" = "1" ]; then do_update; fi
+
+echo
+echo "[deploy] Verifica finale:"
+echo "  curl http://127.0.0.1:$PORT/health   (deve rispondere {\"status\":\"ok\"...})"
+echo "  systemctl status parole-mutanti"
