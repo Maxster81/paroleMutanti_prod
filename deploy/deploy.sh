@@ -8,8 +8,9 @@
 #
 # Utilizzo (dalla root del repo clonato, come root/sudo):
 #   sudo ./deploy.sh                                  # deploy completo
-#   sudo ./deploy.sh --install                        # solo installazione (codice + dipendenze + DB)
-#   sudo ./deploy.sh --env                            # solo creazione file env (se assente)
+#   sudo ./deploy.sh --install                        # solo installazione (codice + dipendenze)
+#   sudo ./deploy.sh --env                            # crea il file env (DATABASE_URL automatica)
+#   sudo ./deploy.sh --db                             # setup DB (utente/schema + import dizionario)
 #   sudo ./deploy.sh --service                        # solo installazione/avvio servizio systemd
 #   sudo ./deploy.sh --caddy                          # solo generazione/ricarica blocco Caddy
 #   sudo ./deploy.sh --update                         # aggiornamento in-place
@@ -47,6 +48,7 @@ TLS_KEY=""
 
 INSTALL_MODE=0
 ENV_MODE=0
+DB_MODE=0
 SERVICE_MODE=0
 CADDY_MODE=0
 UPDATE_MODE=0
@@ -58,6 +60,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --install) INSTALL_MODE=1; shift ;;
         --env) ENV_MODE=1; shift ;;
+        --db) DB_MODE=1; shift ;;
         --service) SERVICE_MODE=1; shift ;;
         --caddy) CADDY_MODE=1; shift ;;
         --update) UPDATE_MODE=1; shift ;;
@@ -90,9 +93,9 @@ if [ "$HELP_MODE" = "1" ]; then
 fi
 
 # Se nessuna modalità esplicita, esegui il deploy completo
-if [ "$INSTALL_MODE" = "0" ] && [ "$ENV_MODE" = "0" ] && [ "$SERVICE_MODE" = "0" ] \
-   && [ "$CADDY_MODE" = "0" ] && [ "$UPDATE_MODE" = "0" ]; then
-    INSTALL_MODE=1; ENV_MODE=1; SERVICE_MODE=1; BACKUP_MODE=1
+if [ "$INSTALL_MODE" = "0" ] && [ "$ENV_MODE" = "0" ] && [ "$DB_MODE" = "0" ] \
+   && [ "$SERVICE_MODE" = "0" ] && [ "$CADDY_MODE" = "0" ] && [ "$UPDATE_MODE" = "0" ]; then
+    INSTALL_MODE=1; ENV_MODE=1; DB_MODE=1; SERVICE_MODE=1; BACKUP_MODE=1
     if [ -n "$DOMAIN" ]; then CADDY_MODE=1; fi
 fi
 
@@ -103,7 +106,7 @@ require_root() {
 }
 
 # ============================================================
-# --install : pacchetti + copia codice + dipendenze + DB
+# --install : pacchetti + copia codice + dipendenze (DB dopo --env, con --db)
 # ============================================================
 do_install() {
     require_root
@@ -131,13 +134,7 @@ do_install() {
     echo "[install] Installazione dipendenze Node (--production)..."
     (cd "$DEPLOY_DIR" && npm install --production)
 
-    echo "[install] Setup database (utente/DB + schema + dizionario)..."
-    echo "  -> verranno eseguiti: db/setup-user.sql, npm run db:init, npm run db:import"
-    (cd "$DEPLOY_DIR" && sudo -u postgres psql -f db/setup-user.sql)
-    (cd "$DEPLOY_DIR" && npm run db:init)
-    (cd "$DEPLOY_DIR" && npm run db:import)
-
-    echo "[install] FATTO. Ora imposta le credenziali con: sudo $0 --env"
+    echo "[install] FATTO. (Il setup del database avviene dopo --env, con il passo --db)"
 }
 
 # ============================================================
@@ -156,14 +153,21 @@ do_env() {
     echo "[env] Generazione $ENV_FILE da .env.example..."
     cp .env.example "$ENV_FILE"
 
-    # Valori che l'utente DEVE fornire (da env o prompt)
+    # DATABASE_URL: se fornita via PAROLE_DATABASE_URL la usa; altrimenti la
+    # genera automaticamente con una password casuale (nessun prompt).
     DATABASE_URL="${PAROLE_DATABASE_URL:-}"
-    DEEPSEEK_KEY="${PAROLE_DEEPSEEK_KEY:-}"
     if [ -z "$DATABASE_URL" ]; then
-        read -rp "DATABASE_URL (es. postgresql://parole_user:PASS@localhost:5432/parole_mutanti): " DATABASE_URL
+        DB_PASSWORD="$(openssl rand -hex 18)"
+        DATABASE_URL="postgresql://parole_user:${DB_PASSWORD}@localhost:5432/parole_mutanti"
+        echo "[env] DATABASE_URL generata automaticamente (password casuale per parole_user)."
+    else
+        echo "[env] DATABASE_URL fornita via PAROLE_DATABASE_URL."
     fi
+
+    # Chiave DeepSeek: opzionale (da env o prompt; vuota = AI disattivata)
+    DEEPSEEK_KEY="${PAROLE_DEEPSEEK_KEY:-}"
     if [ -z "$DEEPSEEK_KEY" ]; then
-        read -rp "DEEPSEEK_API_KEY (lascia vuoto per disattivare il fallback AI): " DEEPSEEK_KEY
+        read -rp "DEEPSEEK_API_KEY (opzionale, lascia vuoto per disattivare il fallback AI): " DEEPSEEK_KEY
     fi
 
     SECRET="$(openssl rand -hex 32)"
@@ -179,7 +183,39 @@ do_env() {
     chmod 600 "$ENV_FILE"
     chown root:"$DEPLOY_GROUP" "$ENV_FILE"
     echo "[env] FATTO. Credenziali in $ENV_FILE (permessi 600)."
-    echo "  -> Aggiorna la riga HOST/PORT se necessario e configura CORS_ORIGIN col tuo dominio."
+    echo "  -> Ora crea lo schema e importa il dizionario con: sudo $0 --db"
+}
+
+# ============================================================
+# --db : setup database (utente/DB + schema + dizionario)
+# ============================================================
+do_db() {
+    require_root
+    if [ ! -f "$ENV_FILE" ]; then
+        echo "ERRORE: $ENV_FILE non presente. Prima esegui: sudo $0 --env" >&2
+        exit 1
+    fi
+
+    # Carica DATABASE_URL dal file env di produzione
+    set -a; . "$ENV_FILE"; set +a
+    if [ -z "${DATABASE_URL:-}" ]; then
+        echo "ERRORE: DATABASE_URL mancante in $ENV_FILE" >&2
+        exit 1
+    fi
+
+    # Estrae la password dall'URL (postgresql://user:PASS@host/db)
+    DB_PASSWORD="$(printf '%s' "$DATABASE_URL" | sed -E 's|^[^:]+://[^:]+:([^@]+)@.*|\1|')"
+
+    echo "[db] Creazione utente + database (setup-user.sql)..."
+    sudo -u postgres psql -v db_password="$DB_PASSWORD" -f "$DEPLOY_DIR/db/setup-user.sql"
+
+    echo "[db] Inizializzazione schema (db:init)..."
+    (cd "$DEPLOY_DIR" && npm run db:init)
+
+    echo "[db] Importazione dizionario (db:import, può richiedere qualche minuto)..."
+    (cd "$DEPLOY_DIR" && npm run db:import)
+
+    echo "[db] FATTO. Database pronto."
 }
 
 # ============================================================
@@ -299,6 +335,7 @@ EOF
 # --- Esecuzione --------------------------------------------------------------
 if [ "$INSTALL_MODE" = "1" ]; then do_install; fi
 if [ "$ENV_MODE" = "1" ]; then do_env; fi
+if [ "$DB_MODE" = "1" ]; then do_db; fi
 if [ "$SERVICE_MODE" = "1" ]; then do_service; fi
 if [ "$CADDY_MODE" = "1" ]; then do_caddy; fi
 if [ "$UPDATE_MODE" = "1" ]; then do_update; fi

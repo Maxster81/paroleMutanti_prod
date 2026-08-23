@@ -79,8 +79,8 @@ sudo ./deploy/deploy.sh \
   --tls-key /etc/caddy/certs/example.com.key
 ```
 
-Durante il deploy ti verranno chiesti `DATABASE_URL` e la chiave DeepSeek; il setup
-del DB genera la password dell'utente del database (copiala dentro `DATABASE_URL`).
+Il deploy genera automaticamente `DATABASE_URL` (password casuale per l'utente DB) e
+ti chiederà solo la chiave DeepSeek (opzionale); crea poi utente/DB, schema e dizionario.
 
 Verifica: `curl https://example.com/health`
 

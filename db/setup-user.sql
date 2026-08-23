@@ -1,13 +1,13 @@
 -- =====================================================================
--- setup-user.sql v2 — Setup utente e DB "Parole Mutanti" (versione robusta)
+-- setup-user.sql v3 — Setup utente e DB "Parole Mutanti"
 -- Eseguire come superuser: `sudo -u postgres psql -f db/setup-user.sql`
+-- (deploy.sh passa la password con `-v db_password=...`)
 --
 -- Strategia:
 --   1. Cleanup (DROP se esiste) per partire pulito
---   2. Abilita pgcrypto per gen_random_bytes
---   3. Crea utente con password generata
---   4. Crea database (top-level, non in DO block)
---   5. Permessi completi su schema public
+--   2. Crea utente: usa la password da `-v db_password` o ne genera una
+--   3. Crea database (top-level, non in DO block)
+--   4. Permessi completi su schema public
 --
 -- Idempotente? SÌ, fa DROP prima di CREATE.
 -- =====================================================================
@@ -16,21 +16,24 @@
 DROP DATABASE IF EXISTS parole_mutanti;
 DROP USER IF EXISTS parole_user;
 
--- 2. Crea utente con password generata (pgcrypto serve per gen_random_bytes)
+-- 2. Crea utente: usa la password da `-v db_password` o ne genera una.
+-- NOTA: psql NON sostituisce le variabili dentro $$...$$, quindi il CREATE USER
+-- è fatto a livello top-level usando :'my_password' (sostituito da psql).
+\if :{?db_password}
+  \set my_password :'db_password'
+\else
+  \set my_password `openssl rand -hex 18`
+  \echo '🔑 Nessuna password fornita: generata automaticamente.'
+\endif
+
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
-DO $$
-DECLARE
-  generated_password TEXT;
-BEGIN
-  generated_password := encode(gen_random_bytes(18), 'hex');
-  EXECUTE format('CREATE USER parole_user WITH PASSWORD %L', generated_password);
-  RAISE NOTICE '===========================================';
-  RAISE NOTICE '✅ UTENTE CREATO: parole_user';
-  RAISE NOTICE '🔑 PASSWORD (copiala nel .env): %', generated_password;
-  RAISE NOTICE '===========================================';
-  RAISE NOTICE 'Esempio DATABASE_URL: postgresql://parole_user:%@localhost:5432/parole_mutanti', generated_password;
-END
-$$;
+CREATE USER parole_user WITH PASSWORD :'my_password';
+\echo ===========================================
+\echo ✅ UTENTE CREATO: parole_user
+\echo PASSWORD: :my_password
+\echo ===========================================
+\echo Aggiungi questa password al DATABASE_URL (host localhost, db parole_mutanti).
+\echo
 
 -- 3. Crea database (comando top-level, NON in DO block)
 CREATE DATABASE parole_mutanti

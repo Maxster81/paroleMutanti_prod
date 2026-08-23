@@ -31,7 +31,7 @@ cd /home/<user>            # oppure: cd /tmp
 git clone https://github.com/Maxster81/paroleMutanti_prod.git paroleMutanti_prod
 cd paroleMutanti_prod
 
-# 2. Deploy completo (install + env + service + backup + caddy)
+# 2. Deploy completo (install + env + db + service + backup + caddy)
 sudo ./deploy/deploy.sh \
   --domain example.com \
   --port 8090 \
@@ -40,9 +40,10 @@ sudo ./deploy/deploy.sh \
 ```
 
 ### Durante il deploy
-- `--env` ti chiederà **`DATABASE_URL`** e la **chiave DeepSeek**.
-- Il setup DB genera una **password** per l'utente del database e la stampa a schermo:
-  copiala e usala dentro `DATABASE_URL`.
+- `--env` genera **automaticamente** `DATABASE_URL` (password casuale per l'utente DB)
+  e ti chiederà **solo** la chiave DeepSeek (opzionale, vuoto = AI disattivata).
+- `--db` crea utente + database, inizializza lo schema e importa il dizionario
+  (nel deploy completo viene eseguito da solo, subito dopo `--env`).
 - Se **non** usi certificati esistenti, ometti `--tls-cert` / `--tls-key` → Caddy userà
   Let's Encrypt automatico.
 - `--caddy` aggiunge `import /etc/caddy/sites/*.conf` al Caddyfile principale
