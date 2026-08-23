@@ -24,13 +24,18 @@ export function renderHome(params = {}) {
       <div class="home-hero">🎮 Parole Mutanti</div>
 
       <div class="card home-guide-card">
-        <div class="home-guide-title">📖 Come si gioca</div>
-        <ul class="home-guide-list">
+        <button type="button" class="home-guide-toggle" id="guide-toggle" aria-expanded="false" aria-controls="guide-list">
+          <span>📖 Come si gioca</span>
+          <span class="guide-arrow" aria-hidden="true">▸</span>
+        </button>
+        <ul class="home-guide-list" id="guide-list" hidden>
           <li>Da <strong>2 a 8 giocatori</strong>, nessun account: scegli un nome e crea (o unisciti a) una partita.</li>
-          <li>Viene scelta una <strong>parola iniziale</strong> (5-8 lettere).</li>
+          <li>Viene scelta una <strong>parola iniziale</strong> (5-8 lettere, configurabile).</li>
           <li>A ogni turno modifichi la parola precedente con <strong>una sola mossa</strong>: cambia 1 lettera, aggiungi 1 lettera oppure rimuovi 1 lettera.</li>
-          <li>La parola deve essere <strong>italiana</strong> (validata da dizionario, con supporto AI).</li>
-          <li>Hai <strong>15-60 secondi</strong> a turno (configurabile): se non rispondi o sbagli, vieni eliminato.</li>
+          <li>La parola deve essere <strong>italiana</strong>: controllo in 3 fasi (dizionario, forme flesse, supporto AI).</li>
+          <li><strong>Non puoi riscrivere</strong> una parola già usata nella partita.</li>
+          <li>Hai <strong>15-60 secondi</strong> a turno: se non rispondi o sbagli, vieni eliminato.</li>
+          <li>Se tutti passano il turno, è <strong>pareggio</strong>: si riparte con una nuova parola.</li>
           <li><strong>Vince l'ultimo che resta in gioco!</strong> 🏆</li>
         </ul>
       </div>
@@ -70,6 +75,17 @@ export function attachHomeHandlers() {
   document.getElementById('btn-join')?.addEventListener('click', () => {
     navigate('#join');
   });
+
+  // Guide "Come si gioca": sezione apribile/chiudibile
+  const guideToggle = document.getElementById('guide-toggle');
+  const guideList = document.getElementById('guide-list');
+  if (guideToggle && guideList) {
+    guideToggle.addEventListener('click', () => {
+      const apri = guideList.hidden;
+      guideList.hidden = !apri;
+      guideToggle.setAttribute('aria-expanded', apri ? 'true' : 'false');
+    });
+  }
 
   // Carica subito la lista
   caricaListaPartite();
