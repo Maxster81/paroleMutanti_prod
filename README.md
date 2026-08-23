@@ -61,8 +61,30 @@ npm run dev
 
 ## 🚀 Deploy in produzione (Ubuntu + systemd + Caddy)
 
-Vedi `deploy/deploy.sh` (script automatizzato) oppure i file `deploy/Caddyfile.prod.snippet`
-e `deploy/parole-mutanti.service` per la configurazione manuale.
+> La **guida passo-passo completa** è in [`deploy/README.md`](deploy/README.md)
+> (architettura, primo deploy, verifica, aggiornamenti, backup).
+
+Sintesi essenziale:
+
+```bash
+# 1. Clona il repo prod in una cartella a scelta (anche /tmp)
+git clone https://github.com/Maxster81/paroleMutanti_prod.git paroleMutanti_prod
+cd paroleMutanti_prod
+
+# 2. Deploy completo (install + env + service + backup + caddy)
+sudo ./deploy.sh \
+  --domain parolemutanti.maxster.top \
+  --port 8090 \
+  --tls-cert /etc/caddy/certs/maxster.top.crt \
+  --tls-key /etc/caddy/certs/maxster.top.key
+```
+
+Durante il deploy ti verranno chiesti `DATABASE_URL` e la chiave DeepSeek; il setup
+del DB genera la password dell'utente del database (copiala dentro `DATABASE_URL`).
+
+Verifica: `curl https://parolemutanti.maxster.top/health`
+
+Aggiornamenti: `sudo ./deploy.sh --update`
 
 Variabili principali (in produzione, su `/etc/parole-mutanti/.env`):
 - `NODE_ENV=production`, `HOST=127.0.0.1`, `PORT=<porta>` (default `8090`)
