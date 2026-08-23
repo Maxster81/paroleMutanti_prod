@@ -68,21 +68,21 @@ Sintesi essenziale:
 
 ```bash
 # 1. Clona il repo prod in una cartella a scelta (anche /tmp)
-git clone https://github.com/Maxster81/paroleMutanti_prod.git paroleMutanti_prod
+git clone <URL-repo-prod> paroleMutanti_prod
 cd paroleMutanti_prod
 
 # 2. Deploy completo (install + env + service + backup + caddy)
 sudo ./deploy.sh \
-  --domain parolemutanti.maxster.top \
+  --domain example.com \
   --port 8090 \
-  --tls-cert /etc/caddy/certs/maxster.top.crt \
-  --tls-key /etc/caddy/certs/maxster.top.key
+  --tls-cert /etc/caddy/certs/example.com.crt \
+  --tls-key /etc/caddy/certs/example.com.key
 ```
 
 Durante il deploy ti verranno chiesti `DATABASE_URL` e la chiave DeepSeek; il setup
 del DB genera la password dell'utente del database (copiala dentro `DATABASE_URL`).
 
-Verifica: `curl https://parolemutanti.maxster.top/health`
+Verifica: `curl https://example.com/health`
 
 Aggiornamenti: `sudo ./deploy.sh --update`
 

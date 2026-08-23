@@ -20,7 +20,7 @@ con systemd + Caddy + PostgreSQL.
 ## ✅ Prerequisiti
 - Ubuntu con systemd
 - Accesso root (`sudo`)
-- Dominio che punta all'IP del server (es. `parolemutanti.maxster.top`)
+- Dominio che punta all'IP del server (es. `example.com`)
 - Certificati TLS (se riusi quelli esistenti) **oppure** Let's Encrypt automatico
 
 ## 🚀 Primo deploy
@@ -28,15 +28,15 @@ con systemd + Caddy + PostgreSQL.
 ```bash
 # 1. Clona il repo prod in una cartella a tua scelta (anche /tmp)
 cd /home/<user>            # oppure: cd /tmp
-git clone https://github.com/Maxster81/paroleMutanti_prod.git paroleMutanti_prod
+git clone <URL-repo-prod> paroleMutanti_prod
 cd paroleMutanti_prod
 
 # 2. Deploy completo (install + env + service + backup + caddy)
 sudo ./deploy.sh \
-  --domain parolemutanti.maxster.top \
+  --domain example.com \
   --port 8090 \
-  --tls-cert /etc/caddy/certs/maxster.top.crt \
-  --tls-key /etc/caddy/certs/maxster.top.key
+  --tls-cert /etc/caddy/certs/example.com.crt \
+  --tls-key /etc/caddy/certs/example.com.key
 ```
 
 ### Durante il deploy
@@ -51,7 +51,7 @@ sudo ./deploy.sh \
 ## 🧪 Verifica
 
 ```bash
-curl https://parolemutanti.maxster.top/health
+curl https://example.com/health
 systemctl status parole-mutanti
 ```
 
