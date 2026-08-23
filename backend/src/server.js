@@ -15,6 +15,7 @@ import { Server as SocketIOServer } from 'socket.io';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { config } from './config.js';
 import { logger } from './logger.js';
 import { healthCheck as dbHealthCheck } from './db/wordQueries.js';
@@ -24,6 +25,10 @@ import { attachSocketHandlers } from './sockets/index.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const FRONTEND_DIR = join(__dirname, '..', '..', 'frontend');
+
+// Versione dell'app letta da package.json (fonte di verità, in sync con VERSION)
+const require = createRequire(import.meta.url);
+const APP_VERSION = require('../../package.json').version || '0.0.0';
 
 // ============================================================
 // Express app
@@ -72,7 +77,7 @@ app.get('/health', async (req, res) => {
     status: 'ok',
     timestamp: new Date().toISOString(),
     uptime_seconds: Math.floor(process.uptime()),
-    version: '0.1.0',
+    version: APP_VERSION,
     database: dbCheck.ok ? 'ok' : 'error',
     database_error: dbCheck.errore,
     partite_attive: io.engine.clientsCount > 0 ? 'clients_connected' : 'no_clients',
