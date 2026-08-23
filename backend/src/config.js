@@ -52,7 +52,9 @@ function validaConfig(cfg) {
     if (!cfg.sessionSecret || cfg.sessionSecret.length < 32) {
       errori.push('SESSION_SECRET deve essere almeno 32 caratteri in produzione');
     }
-    if (cfg.deepseek.apiKey.startsWith('sk-INSERISCI') || cfg.deepseek.apiKey.length < 20) {
+    // Chiave DeepSeek OPZIONALE in produzione: vuota = fallback AI disattivato.
+    // Se invece è impostata deve essere valida (no placeholder, >= 20 caratteri).
+    if (cfg.deepseek.apiKey && (cfg.deepseek.apiKey.startsWith('sk-INSERISCI') || cfg.deepseek.apiKey.length < 20)) {
       errori.push('DEEPSEEK_API_KEY non configurata correttamente');
     }
   } else {
