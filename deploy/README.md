@@ -32,7 +32,7 @@ git clone https://github.com/Maxster81/paroleMutanti_prod.git paroleMutanti_prod
 cd paroleMutanti_prod
 
 # 2. Deploy completo (install + env + service + backup + caddy)
-sudo ./deploy.sh \
+sudo ./deploy/deploy.sh \
   --domain example.com \
   --port 8090 \
   --tls-cert /etc/caddy/certs/example.com.crt \
@@ -61,7 +61,7 @@ systemctl status parole-mutanti
 
 ```bash
 cd /home/<user>/paroleMutanti_prod   # (o dove hai clonato)
-sudo ./deploy.sh --update            # git pull --ff-only + npm install + restart
+sudo ./deploy/deploy.sh --update            # git pull --ff-only + npm install + restart
 ```
 
 ## 💾 Backup

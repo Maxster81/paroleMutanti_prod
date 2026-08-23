@@ -72,7 +72,7 @@ git clone https://github.com/Maxster81/paroleMutanti_prod.git paroleMutanti_prod
 cd paroleMutanti_prod
 
 # 2. Deploy completo (install + env + service + backup + caddy)
-sudo ./deploy.sh \
+sudo ./deploy/deploy.sh \
   --domain example.com \
   --port 8090 \
   --tls-cert /etc/caddy/certs/example.com.crt \
@@ -84,7 +84,7 @@ del DB genera la password dell'utente del database (copiala dentro `DATABASE_URL
 
 Verifica: `curl https://example.com/health`
 
-Aggiornamenti: `sudo ./deploy.sh --update`
+Aggiornamenti: `sudo ./deploy/deploy.sh --update`
 
 Variabili principali (in produzione, su `/etc/parole-mutanti/.env`):
 - `NODE_ENV=production`, `HOST=127.0.0.1`, `PORT=<porta>` (default `8090`)
