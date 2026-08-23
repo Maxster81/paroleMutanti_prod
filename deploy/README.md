@@ -28,7 +28,7 @@ con systemd + Caddy + PostgreSQL.
 ```bash
 # 1. Clona il repo prod in una cartella a tua scelta (anche /tmp)
 cd /home/<user>            # oppure: cd /tmp
-git clone <URL-repo-prod> paroleMutanti_prod
+git clone https://github.com/Maxster81/paroleMutanti_prod.git paroleMutanti_prod
 cd paroleMutanti_prod
 
 # 2. Deploy completo (install + env + service + backup + caddy)
