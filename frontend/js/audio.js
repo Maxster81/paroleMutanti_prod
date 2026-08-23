@@ -31,56 +31,76 @@ function getCtx() {
 }
 
 /**
- * Suona un beep a una frequenza per una durata.
- * @param {number} freq - Hz (default 800)
- * @param {number} durataMs - durata in ms (default 100)
+ * Suona una nota con envelope pulita (attacco lineare breve + decay esponenziale),
+ * evitando i "click"/"pop" dovuti a variazioni di ampiezza improvvise.
+ *
+ * @param {number} freq - frequenza Hz
+ * @param {number} durataMs - durata in ms
+ * @param {object} [opzioni]
+ * @param {string} [opzioni.tipo='sine'] - forma d'onda ('sine'|'triangle'|'square'|'sawtooth')
+ * @param {number} [opzioni.volume=0.3] - ampiezza di picco
+ * @param {number} [opzioni.attaccoMs=5] - durata dell'attacco (per smorzare il click)
  */
-export function beep(freq = 800, durataMs = 100) {
+function suona(freq, durataMs, { tipo = 'sine', volume = 0.3, attaccoMs = 5 } = {}) {
   if (!state.get().audioAbilitato) return;
   const ctx = getCtx();
   if (!ctx) return;
   try {
+    const t0 = ctx.currentTime;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.frequency.value = freq;
-    osc.type = 'sine';
-    gain.gain.setValueAtTime(0.3, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + durataMs / 1000);
+    osc.type = tipo;
+    osc.frequency.setValueAtTime(freq, t0);
+    gain.gain.setValueAtTime(0.0001, t0);
+    gain.gain.linearRampToValueAtTime(volume, t0 + attaccoMs / 1000);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + durataMs / 1000);
     osc.connect(gain);
     gain.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + durataMs / 1000);
+    osc.start(t0);
+    osc.stop(t0 + durataMs / 1000 + 0.02);
   } catch (err) {
-    console.warn('[audio] beep fallito:', err.message);
+    console.warn('[audio] suona fallito:', err.message);
   }
 }
 
 /**
- * Beep di countdown (ultimi 10 secondi del turno).
+ * Beep generico (default: nota chiara).
+ * @param {number} freq - Hz (default 800)
+ * @param {number} durataMs - durata in ms (default 100)
+ */
+export function beep(freq = 800, durataMs = 100) {
+  suona(freq, durataMs);
+}
+
+/**
+ * Tick di countdown (ultimi secondi del turno): nota acuta e corta.
  */
 export function tick() {
-  beep(1000, 50);
+  suona(1100, 40, { tipo: 'triangle', volume: 0.25 });
 }
 
 /**
- * Buzzer di timeout/errore.
+ * Buzzer di timeout/errore: due toni discendenti "secchi".
  */
 export function buzzer() {
-  beep(200, 600);
+  suona(320, 180, { tipo: 'sawtooth', volume: 0.25 });
+  setTimeout(() => suona(180, 320, { tipo: 'sawtooth', volume: 0.25 }), 180);
 }
 
 /**
- * Suono di successo (parola validata, partita vinta).
+ * Suono di successo (parola validata, partita vinta): arpeggio di Do maggiore
+ * ascendente, piacevole e non fastidioso.
  */
 export function success() {
-  beep(523, 100);
-  setTimeout(() => beep(659, 100), 120);
-  setTimeout(() => beep(784, 200), 250);
+  const note = [523.25, 659.25, 783.99, 1046.5]; // C5 E5 G5 C6
+  note.forEach((f, i) => {
+    setTimeout(() => suona(f, 180, { tipo: 'triangle', volume: 0.28 }), i * 130);
+  });
 }
 
 /**
- * Beep di click (per UI).
+ * Click per la UI: impulso brevissimo e "leggero".
  */
 export function click() {
-  beep(600, 30);
+  suona(700, 25, { tipo: 'square', volume: 0.15 });
 }
