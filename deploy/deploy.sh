@@ -13,7 +13,8 @@
 #   sudo ./deploy.sh --service                        # solo installazione/avvio servizio systemd
 #   sudo ./deploy.sh --caddy                          # solo generazione/ricarica blocco Caddy
 #   sudo ./deploy.sh --update                         # aggiornamento in-place
-#   sudo ./deploy.sh --domain esempio.it --port 8090  # parametri Caddy/porta
+#   sudo ./deploy.sh --domain esempio.it --port 8090 \
+#                   --tls-cert /etc/caddy/certs/x.crt --tls-key /etc/caddy/certs/x.key
 #   sudo ./deploy.sh --dir /opt/paroleMutanti         # directory installazione personalizzata
 #   sudo ./deploy.sh --env-file /etc/parole-mutanti.env  # env personalizzato
 #   sudo ./deploy.sh --help                           # aiuto
@@ -40,6 +41,9 @@ CADDYFILE_SRC="deploy/Caddyfile.prod.snippet"
 # Parametri (overridabili)
 PORT="8090"
 DOMAIN=""
+# Certificati TLS personalizzati (se vuoto, Caddy usa Let's Encrypt automatico)
+TLS_CERT=""
+TLS_KEY=""
 
 INSTALL_MODE=0
 ENV_MODE=0
@@ -64,6 +68,12 @@ while [[ $# -gt 0 ]]; do
         --port)
             [[ -z "${2:-}" || "$2" == --* ]] && { echo "ERRORE: --port richiede un valore" >&2; exit 1; }
             PORT="$2"; shift 2 ;;
+        --tls-cert)
+            [[ -z "${2:-}" || "$2" == --* ]] && { echo "ERRORE: --tls-cert richiede un valore" >&2; exit 1; }
+            TLS_CERT="$2"; shift 2 ;;
+        --tls-key)
+            [[ -z "${2:-}" || "$2" == --* ]] && { echo "ERRORE: --tls-key richiede un valore" >&2; exit 1; }
+            TLS_KEY="$2"; shift 2 ;;
         --dir)
             [[ -z "${2:-}" || "$2" == --* ]] && { echo "ERRORE: --dir richiede un path" >&2; exit 1; }
             DEPLOY_DIR="$2"; shift 2 ;;
@@ -193,7 +203,7 @@ do_service() {
 }
 
 # ============================================================
-# --caddy : genera il blocco Caddy dal template
+# --caddy : genera il sito Caddy (file .conf) + import nel Caddyfile
 # ============================================================
 do_caddy() {
     require_root
@@ -201,19 +211,46 @@ do_caddy() {
         echo "ERRORE: --caddy richiede --domain <dominio>" >&2; exit 1
     fi
 
-    echo "[caddy] Generazione blocco per $DOMAIN sulla porta $PORT..."
-    sed -e "s|__DOMAIN__|$DOMAIN|g" -e "s|__PORT__|$PORT|g" "$CADDYFILE_SRC" \
-        > /tmp/parole-mutanti-caddy.block
+    SITES_DIR="/etc/caddy/sites"
+    CONF_FILE="$SITES_DIR/parole-mutanti.conf"
+    CADDYFILE="/etc/caddy/Caddyfile"
+    IMPORT_LINE="import $SITES_DIR/*.conf"
 
-    mkdir -p /var/log/caddy
-    chown caddy:caddy /var/log/caddy
+    # Riga TLS: se sono stati forniti cert+key li usa (certificati esistenti),
+    # altrimenti resta vuota → Caddy usa Let's Encrypt automatico.
+    local TLS_LINE=""
+    if [ -n "$TLS_CERT" ] && [ -n "$TLS_KEY" ]; then
+        TLS_LINE="tls $TLS_CERT $TLS_KEY"
+    fi
 
-    echo "[caddy] Il blocco è in /tmp/parole-mutanti-caddy.block"
-    echo "  -> Incollalo nel tuo /etc/caddy/Caddyfile, poi:"
-    echo "     sudo caddy validate --config /etc/caddy/Caddyfile"
-    echo "     sudo systemctl reload caddy"
-    echo "  (Per un merge automatico valuta un Caddyfile modulare con import.)"
-    echo "[caddy] FATTO."
+    echo "[caddy] Generazione $CONF_FILE per $DOMAIN (porta $PORT)..."
+    mkdir -p "$SITES_DIR" /var/log/caddy
+    chown caddy:caddy /var/log/caddy 2>/dev/null || true
+
+    sed -e "s|__DOMAIN__|$DOMAIN|g" \
+        -e "s|__PORT__|$PORT|g" \
+        -e "s|__TLS_LINE__|$TLS_LINE|g" \
+        "$CADDYFILE_SRC" > "$CONF_FILE"
+    chmod 644 "$CONF_FILE"
+
+    # Aggiunge la riga import al Caddyfile principale solo se non già presente
+    if ! grep -qF "$IMPORT_LINE" "$CADDYFILE"; then
+        echo "[caddy] Aggiungo '$IMPORT_LINE' al Caddyfile principale..."
+        printf '\n# --- Siti modulari (import) ---\n%s\n' "$IMPORT_LINE" >> "$CADDYFILE"
+    else
+        echo "[caddy] Import già presente nel Caddyfile principale."
+    fi
+
+    echo "[caddy] Validazione configurazione..."
+    if caddy validate --config "$CADDYFILE"; then
+        echo "[caddy] Reload Caddy..."
+        systemctl reload caddy
+        echo "[caddy] FATTO. Il sito https://$DOMAIN è attivo."
+    else
+        echo "[caddy] ERRORE: configurazione non valida, Caddy NON è stato ricaricato." >&2
+        echo "  Controlla $CONF_FILE (dominio, porta, certificati)." >&2
+        exit 1
+    fi
 }
 
 # ============================================================
