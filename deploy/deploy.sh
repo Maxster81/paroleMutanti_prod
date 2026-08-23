@@ -279,7 +279,13 @@ do_caddy() {
 
     echo "[caddy] Generazione $CONF_FILE per $DOMAIN (porta $PORT)..."
     mkdir -p "$SITES_DIR" /var/log/caddy
+    # Assicura che Caddy (utente caddy) possa scrivere il proprio log:
+    # rimuove un eventuale file stantio di proprietà di root e ricrea come caddy.
     chown caddy:caddy /var/log/caddy 2>/dev/null || true
+    rm -f /var/log/caddy/parole-mutanti.log
+    touch /var/log/caddy/parole-mutanti.log
+    chown caddy:caddy /var/log/caddy/parole-mutanti.log
+    chmod 644 /var/log/caddy/parole-mutanti.log
 
     sed -e "s|__DOMAIN__|$DOMAIN|g" \
         -e "s|__PORT__|$PORT|g" \
