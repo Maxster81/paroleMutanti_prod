@@ -100,6 +100,12 @@ export const config = (() => {
       enabled: toBool(process.env.DEEPSEEK_ENABLED ?? 'true'),
     },
 
+    // Telegram (notifiche feedback — opzionale; vuoto = disattivo)
+    telegram: {
+      botToken: process.env.TELEGRAM_BOT_TOKEN || '',
+      chatId: process.env.TELEGRAM_CHAT_ID || '',
+    },
+
     // Gioco
     game: {
       minPlayers: toInt(process.env.MIN_PLAYERS, 2, 2, 8),

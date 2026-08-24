@@ -22,6 +22,7 @@ import { renderJoin, attachJoinHandlers } from './views/join.js';
 import { renderLobby, attachLobbyHandlers } from './views/lobby.js';
 import { renderGame, attachGameHandlers } from './views/game.js';
 import { renderEnd, attachEndHandlers } from './views/end.js';
+import { renderFeedback, attachFeedbackHandlers } from './views/feedback.js';
 
 console.log('[main] Parole Mutanti frontend avviato');
 
@@ -88,6 +89,7 @@ route('#join', renderJoin);
 route('#lobby', renderLobby);
 route('#game', renderGame);
 route('#end', renderEnd);
+route('#feedback', renderFeedback);
 
 let currentTickSecond = -1;
 
@@ -105,6 +107,7 @@ onRouteChange((renderFn, params) => {
     case '#lobby': attachLobbyHandlers(); break;
     case '#game': attachGameHandlers(); break;
     case '#end': attachEndHandlers(); break;
+    case '#feedback': attachFeedbackHandlers(); break;
   }
 });
 

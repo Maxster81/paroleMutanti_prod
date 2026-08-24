@@ -68,6 +68,22 @@ CREATE INDEX IF NOT EXISTS idx_game_logs_winner_name ON game_logs(winner_name) W
 CREATE INDEX IF NOT EXISTS idx_game_logs_game_id ON game_logs(game_id);
 
 -- =====================================================================
+-- Tabella: feedback
+-- Feedback/segnalazioni inviati dagli utenti (inoltro Telegram opzionale)
+-- =====================================================================
+CREATE TABLE IF NOT EXISTS feedback (
+    id BIGSERIAL PRIMARY KEY,
+    tipo TEXT NOT NULL DEFAULT 'altro' CHECK (tipo IN ('suggerimento', 'problema', 'altro')),
+    sottocategoria TEXT,
+    testo TEXT NOT NULL,
+    nome TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_feedback_created_at ON feedback(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_feedback_tipo ON feedback(tipo);
+
+-- =====================================================================
 -- Vista di utilità
 -- =====================================================================
 CREATE OR REPLACE VIEW words_count_by_length AS

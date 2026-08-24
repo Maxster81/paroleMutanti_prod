@@ -61,6 +61,10 @@ export function renderHome(params = {}) {
         · <span class="badge badge-muted">${s.tema}</span>
         · audio <span class="badge ${s.audioAbilitato ? 'badge-success' : 'badge-muted'}">${s.audioAbilitato ? 'on' : 'off'}</span>
       </p>
+
+      <a class="home-feedback" href="#feedback">
+        💬 Invia un feedback
+      </a>
     </div>
   `;
 }

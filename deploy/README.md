@@ -62,12 +62,13 @@ systemctl status parole-mutanti
 
 ```bash
 cd /home/<user>/paroleMutanti_prod   # (o dove hai clonato)
-sudo ./deploy/deploy.sh --update            # git pull (nel clone) + rsync + npm install --production + restart
+sudo ./deploy/deploy.sh --update            # git pull (clone) + rsync + npm + schema idempotente + restart
 ```
 
 > `--update` esegue, in ordine: `git pull --ff-only` nella **directory corrente** (il clone),
-> l'rsync dei file di produzione in `/opt/paroleMutanti`, `npm install --production` e il
-> restart del servizio. Il `git pull` NON va fatto in `/opt/paroleMutanti` (è una copia senza `.git`).
+> l'rsync dei file di produzione in `/opt/paroleMutanti`, `npm install --production`,
+> **`db:init` (schema idempotente**: crea le tabelle nuove, es. `feedback`, senza toccare i dati)
+> e il restart del servizio. Il `git pull` NON va fatto in `/opt/paroleMutanti` (è una copia senza `.git`).
 
 ## 🟢 Versione Node
 

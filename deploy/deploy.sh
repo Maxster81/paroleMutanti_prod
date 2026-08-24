@@ -10,10 +10,14 @@
 #   sudo ./deploy.sh                                  # deploy completo
 #   sudo ./deploy.sh --install                        # solo installazione (codice + dipendenze)
 #   sudo ./deploy.sh --env                            # crea il file env (DATABASE_URL automatica)
-#   sudo ./deploy.sh --db                             # setup DB (utente/schema + import dizionario)
+#   sudo ./deploy.sh --db                             # setup DB (utente/db + schema + import dizionario) — distruttivo
 #   sudo ./deploy.sh --service                        # solo installazione/avvio servizio systemd
 #   sudo ./deploy.sh --caddy                          # solo generazione/ricarica blocco Caddy
-#   sudo ./deploy.sh --update                         # git pull (clone) + rsync + npm + restart
+#   sudo ./deploy.sh --update                         # git pull (clone) + rsync + npm + schema idempotente + restart
+#
+#   --update applica SEMPRE lo schema (db:init, idempotente): crea le tabelle
+#   mancanti (es. `feedback`) senza toccare i dati esistenti. --db invece è per
+#   la PRIMA installazione (DROP + ricrea utente/database).
 #   sudo ./deploy.sh --domain esempio.it --port 8090 \
 #                   --tls-cert /etc/caddy/certs/x.crt --tls-key /etc/caddy/certs/x.key
 #   sudo ./deploy.sh --dir /opt/paroleMutanti         # directory installazione personalizzata
@@ -209,6 +213,27 @@ do_env() {
 }
 
 # ============================================================
+# do_schema : applica lo schema DB (idempotente). Usato sia da --db
+# (nuova installazione) sia da --update (crea le tabelle mancanti,
+# es. `feedback`, senza toccare i dati esistenti).
+# ============================================================
+do_schema() {
+    require_root
+    if [ ! -f "$ENV_FILE" ]; then
+        echo "[schema] AVVISO: $ENV_FILE non presente, salto l'inizializzazione schema." >&2
+        return
+    fi
+    DATABASE_URL="$(grep -E '^DATABASE_URL=' "$ENV_FILE" | head -1 | cut -d= -f2- | tr -d '\\r')"
+    if [ -z "$DATABASE_URL" ]; then
+        echo "[schema] AVVISO: DATABASE_URL mancante in $ENV_FILE, salto." >&2
+        return
+    fi
+    export DATABASE_URL
+    echo "[schema] Applicazione schema (db:init, idempotente)..."
+    (cd "$DEPLOY_DIR" && npm run db:init)
+}
+
+# ============================================================
 # --db : setup database (utente/DB + schema + dizionario)
 # ============================================================
 do_db() {
@@ -234,7 +259,7 @@ do_db() {
     sudo -u postgres psql -v db_password="$DB_PASSWORD" -f "$DEPLOY_DIR/db/setup-user.sql"
 
     echo "[db] Inizializzazione schema (db:init)..."
-    (cd "$DEPLOY_DIR" && npm run db:init)
+    do_schema
 
     echo "[db] Importazione dizionario (db:import, può richiedere qualche minuto)..."
     (cd "$DEPLOY_DIR" && npm run db:import)
@@ -332,10 +357,12 @@ do_caddy() {
 # NON in $DEPLOY_DIR (/opt/paroleMutanti), che è una copia rsync senza .git.
 do_update() {
     require_root
-    echo "[update] git pull + rsync + npm install --production + restart..."
+    echo "[update] git pull + rsync + npm install --production + schema + restart..."
     git pull --ff-only
     sync_code
     (cd "$DEPLOY_DIR" && npm install --production)
+    # Applica lo schema (idempotente): crea eventuali tabelle nuove (es. feedback)
+    do_schema
     systemctl restart parole-mutanti
     echo "[update] FATTO."
 }

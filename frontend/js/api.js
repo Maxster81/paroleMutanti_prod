@@ -23,3 +23,25 @@ export async function healthCheck() {
     return { ok: false, db: 'error', error: err.message };
   }
 }
+
+/**
+ * Invia un feedback al backend (POST /api/feedback).
+ * Il server salva in DB e (se configurato) inoltra a Telegram.
+ *
+ * @param {object} payload - { tipo, sottocategoria, testo, nome }
+ * @returns {Promise<{ok: boolean, errore?: string, messaggio?: string, id?: number, telegram?: boolean}>}
+ */
+export async function inviaFeedback(payload) {
+  try {
+    const res = await fetch(`${BASE}/api/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    return { ok: res.ok, ...data };
+  } catch (err) {
+    console.error('[api] inviaFeedback fallito:', err.message);
+    return { ok: false, errore: 'rete', messaggio: 'Impossibile raggiungere il server.' };
+  }
+}

@@ -20,6 +20,9 @@ import { config } from './config.js';
 import { logger } from './logger.js';
 import { healthCheck as dbHealthCheck } from './db/wordQueries.js';
 import { closePool } from './db/pool.js';
+import { inserisciFeedback } from './db/feedbackQueries.js';
+import { inviaFeedbackTelegram } from './telegram/telegramClient.js';
+import { creaRateLimiter } from './utils/rateLimiter.js';
 import { attachSocketHandlers } from './sockets/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -84,6 +87,58 @@ app.get('/health', async (req, res) => {
     env: config.nodeEnv,
   };
   res.status(dbCheck.ok ? 200 : 503).json(stato);
+});
+
+// Rate limiter per il feedback (3/min per IP, anti-spam)
+const rateLimiterFeedback = creaRateLimiter({ max: 3, windowMs: 60_000 });
+
+/**
+ * POST /api/feedback — riceve un feedback dal form, lo salva in DB
+ * e lo inoltra (opzionale) a un bot Telegram.
+ */
+app.post('/api/feedback', async (req, res) => {
+  const ip =
+    req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+    req.socket?.remoteAddress ||
+    'unknown';
+  if (!rateLimiterFeedback.check(ip)) {
+    return res.status(429).json({ ok: false, errore: 'rate_limit', messaggio: 'Troppe segnalazioni, riprova tra poco.' });
+  }
+
+  const { tipo, sottocategoria, testo, nome } = req.body || {};
+
+  // Validazione server-side
+  const tipiValidi = ['suggerimento', 'problema', 'altro'];
+  const tipoOk = tipiValidi.includes(tipo);
+  const testoOk = typeof testo === 'string' && testo.trim().length >= 3 && testo.trim().length <= 2000;
+  if (!tipoOk || !testoOk) {
+    return res.status(400).json({ ok: false, errore: 'parametri_non_validi', messaggio: 'Compila tipo e testo (minimo 3 caratteri).' });
+  }
+
+  const nomePulito = typeof nome === 'string' && nome.trim() ? nome.trim().slice(0, 20) : null;
+  const sottocategoriaPulita = typeof sottocategoria === 'string' && sottocategoria.trim() ? sottocategoria.trim().slice(0, 40) : null;
+  const testoPulito = testo.trim();
+
+  // Persistenza (backup/audit anche se Telegram non è configurato)
+  const salvato = await inserisciFeedback({
+    tipo,
+    sottocategoria: sottocategoriaPulita,
+    testo: testoPulito,
+    nome: nomePulito,
+  });
+  if (!salvato.ok) {
+    return res.status(500).json({ ok: false, errore: 'errore_interno' });
+  }
+
+  // Inoltro Telegram (non blocca la risposta se fallisce)
+  const inviato = await inviaFeedbackTelegram({
+    tipo,
+    sottocategoria: sottocategoriaPulita,
+    testo: testoPulito,
+    nome: nomePulito,
+  });
+
+  res.status(201).json({ ok: true, id: salvato.id, telegram: inviato.ok });
 });
 
 /**
