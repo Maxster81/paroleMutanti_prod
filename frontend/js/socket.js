@@ -13,7 +13,9 @@
 import { state } from './state.js';
 
 let socket = null;
+let hadConnection = false; // true dopo la PRIMA connessione (per distinguere le riconnessioni)
 const listeners = new Map(); // evento → Set di callback
+const reconnectListeners = new Set(); // callback da chiamare dopo una riconnessione riuscita
 
 /**
  * Connette al backend Socket.io. Emette eventi in state per la UI.
@@ -38,6 +40,15 @@ export function connect() {
   socket.on('connect', () => {
     console.log('[socket] connesso, id=' + socket.id);
     state.update({ connessione: 'online' });
+    // In Socket.io l'evento 'connect' scatta a OGNI (ri)connessione.
+    // Se non è la prima, è una riconnessione dopo una disconnessione
+    // (es. standby del telefono): notifica i listener registrati con
+    // onReconnect() così il client può ri-sincronizzare lo stato.
+    if (hadConnection) {
+      console.log('[socket] riconnessione riuscita, id=' + socket.id);
+      for (const cb of reconnectListeners) cb();
+    }
+    hadConnection = true;
   });
 
   socket.on('disconnect', (motivo) => {
@@ -115,4 +126,14 @@ export function on(evento, callback) {
   if (!listeners.has(evento)) listeners.set(evento, new Set());
   listeners.get(evento).add(callback);
   return () => listeners.get(evento)?.delete(callback);
+}
+
+/**
+ * Registra una callback chiamata dopo una riconnessione riuscita del socket
+ * (es. dopo uno standby del telefono). Utile per ri-sincronizzare lo stato.
+ *
+ * @param {function} callback
+ */
+export function onReconnect(callback) {
+  reconnectListeners.add(callback);
 }

@@ -11,7 +11,7 @@
  */
 
 import { state } from './state.js';
-import { connect as socketConnect, on as socketOn, emit, getSocket } from './socket.js';
+import { connect as socketConnect, on as socketOn, onReconnect, emit, getSocket } from './socket.js';
 import { click as audioClick, beep, tick as audioTick } from './audio.js';
 import { healthCheck } from './api.js';
 import { route, start as routerStart, onRouteChange, navigate } from './router.js';
@@ -236,6 +236,29 @@ socketOn('partita_cancellata', () => {
   alert('La partita è stata cancellata');
   state.update({ gameId: null, partita: null });
   navigate('#home');
+});
+
+/* ============================================================
+   Riconnessione socket: ri-sincronizza lo stato della partita
+   Dopo uno standby/disconnessione il client si riconnette con un nuovo
+   socket.id: va ri-registrato nella room e allineato allo stato reale
+   tramite request_state (che il server usa per ri-agganciare il socket).
+   ============================================================ */
+onReconnect(() => {
+  const gid = state.get().gameId || localStorage.getItem('pm-gameId');
+  if (!gid) return;
+  console.log('[main] riconnesso, ri-sincronizzo partita:', gid);
+  emit('request_state', { gameId: gid, nome: localStorage.getItem('pm-nome') || '' }, (resp) => {
+    if (!resp || !resp.ok || !resp.stato) {
+      // Partita non più recuperabile (es. rimossa dallo sweeper) → pulisci e vai a home
+      localStorage.removeItem('pm-gameId');
+      state.update({ gameId: null, partita: null });
+      navigate('#home');
+      return;
+    }
+    state.update({ gameId: gid, partita: resp.stato });
+    navigate(resp.stato.state === 'running' ? `#game?gameId=${gid}` : `#lobby?gameId=${gid}`);
+  });
 });
 
 /* ============================================================
