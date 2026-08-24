@@ -172,6 +172,11 @@ do_env() {
             sed -i "s|^SESSION_SECRET=.*|SESSION_SECRET=$NEW_SECRET|" "$ENV_FILE"
             echo "[env] SESSION_SECRET non valido: rigenerato automaticamente."
         fi
+        # Normalizza SEMPRE owner+permessi (evita che modifiche manuali/deploy
+        # lascino il file di proprietà di root, rendendolo illeggibile al servizio).
+        chown "$DEPLOY_USER:$DEPLOY_GROUP" "$ENV_FILE"
+        chmod 600 "$ENV_FILE"
+        echo "[env] Permessi ripristinati su $ENV_FILE (owner $DEPLOY_USER, 600)."
         return
     fi
 
@@ -220,17 +225,18 @@ do_env() {
 do_schema() {
     require_root
     if [ ! -f "$ENV_FILE" ]; then
-        echo "[schema] AVVISO: $ENV_FILE non presente, salto l'inizializzazione schema." >&2
-        return
+        echo "ERRORE: $ENV_FILE non presente, impossibile applicare lo schema." >&2
+        exit 1
     fi
     DATABASE_URL="$(grep -E '^DATABASE_URL=' "$ENV_FILE" | head -1 | cut -d= -f2- | tr -d '\\r')"
     if [ -z "$DATABASE_URL" ]; then
-        echo "[schema] AVVISO: DATABASE_URL mancante in $ENV_FILE, salto." >&2
-        return
+        echo "ERRORE: DATABASE_URL mancante in $ENV_FILE, impossibile applicare lo schema." >&2
+        exit 1
     fi
     export DATABASE_URL
     echo "[schema] Applicazione schema (db:init, idempotente)..."
     (cd "$DEPLOY_DIR" && npm run db:init)
+    echo "[schema] FATTO. Schema aggiornato (tabelle: vedi output db:init sopra)."
 }
 
 # ============================================================
