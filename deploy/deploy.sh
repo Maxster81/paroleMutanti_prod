@@ -192,9 +192,10 @@ do_env() {
     sed -i "s|^DEEPSEEK_API_KEY=.*|DEEPSEEK_API_KEY=$DEEPSEEK_KEY|" "$ENV_FILE"
     sed -i "s|^SESSION_SECRET=.*|SESSION_SECRET=$SECRET|" "$ENV_FILE"
 
+    # Owner = utente del servizio (l'app deve poter leggere i segreti), permessi 600.
     chmod 600 "$ENV_FILE"
-    chown root:"$DEPLOY_GROUP" "$ENV_FILE"
-    echo "[env] FATTO. Credenziali in $ENV_FILE (permessi 600)."
+    chown "$DEPLOY_USER:$DEPLOY_GROUP" "$ENV_FILE"
+    echo "[env] FATTO. Credenziali in $ENV_FILE (owner $DEPLOY_USER, permessi 600)."
     echo "  -> Ora crea lo schema e importa il dizionario con: sudo $0 --db"
 }
 
@@ -245,6 +246,8 @@ do_service() {
     sed -i "s|^Group=.*|Group=$DEPLOY_GROUP|" "$SERVICE_DST"
     sed -i "s|^WorkingDirectory=.*|WorkingDirectory=$DEPLOY_DIR|" "$SERVICE_DST"
     sed -i "s|^EnvironmentFile=.*|EnvironmentFile=$ENV_FILE|" "$SERVICE_DST"
+    # Sostituisce il path env anche dentro ExecStart (per --env-file personalizzato)
+    sed -i "s|/etc/parole-mutanti/.env|$ENV_FILE|g" "$SERVICE_DST"
 
     # Assicura la cartella log (ReadWritePaths dell'hardening) prima di avviare
     mkdir -p "$DEPLOY_DIR/logs"

@@ -23,7 +23,8 @@ WorkingDirectory=/opt/paroleMutanti
 # La porta di ascolto è quella in PORT (dall'EnvironmentFile).
 # In produzione impostare HOST=127.0.0.1 (il reverse proxy Caddy sta davanti).
 EnvironmentFile=/etc/parole-mutanti/.env
-ExecStart=/usr/bin/node backend/src/server.js
+# Carica il .env con bash (l'app gira come parole-mutanti e deve leggere i segreti).
+ExecStart=/bin/bash -c 'set -a; . /etc/parole-mutanti/.env; set +a; exec /usr/bin/node backend/src/server.js'
 Restart=always
 RestartSec=10
 StandardOutput=journal
