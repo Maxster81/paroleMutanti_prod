@@ -13,7 +13,7 @@
 #   sudo ./deploy.sh --db                             # setup DB (utente/schema + import dizionario)
 #   sudo ./deploy.sh --service                        # solo installazione/avvio servizio systemd
 #   sudo ./deploy.sh --caddy                          # solo generazione/ricarica blocco Caddy
-#   sudo ./deploy.sh --update                         # aggiornamento in-place
+#   sudo ./deploy.sh --update                         # git pull (clone) + rsync + npm + restart
 #   sudo ./deploy.sh --domain esempio.it --port 8090 \
 #                   --tls-cert /etc/caddy/certs/x.crt --tls-key /etc/caddy/certs/x.key
 #   sudo ./deploy.sh --dir /opt/paroleMutanti         # directory installazione personalizzata
@@ -106,6 +106,24 @@ require_root() {
 }
 
 # ============================================================
+# sync_code : copia SOLO i file di produzione dal clone in $DEPLOY_DIR
+# ============================================================
+# Whitelist rsync (stessa logica di sync-to-prod.sh). Se aggiungi una cartella
+# root di produzione, aggiungi qui la relativa riga --include.
+sync_code() {
+    rsync -a --delete \
+        --include='backend/' --include='backend/src/' --include='backend/src/***' \
+        --include='frontend/' --include='frontend/***' \
+        --include='db/' --include='db/***' \
+        --include='deploy/' --include='deploy/***' \
+        --include='package.json' --include='package-lock.json' \
+        --include='.env.example' --include='.gitignore' \
+        --include='README.md' --include='VERSION' \
+        --exclude='*' \
+        ./ "$DEPLOY_DIR/"
+}
+
+# ============================================================
 # --install : pacchetti + copia codice + dipendenze (DB dopo --env, con --db)
 # ============================================================
 do_install() {
@@ -119,16 +137,7 @@ do_install() {
 
     echo "[install] Copia del codice in $DEPLOY_DIR ..."
     mkdir -p "$DEPLOY_DIR"
-    rsync -a --delete \
-        --include='backend/' --include='backend/src/' --include='backend/src/***' \
-        --include='frontend/' --include='frontend/***' \
-        --include='db/' --include='db/***' \
-        --include='deploy/' --include='deploy/***' \
-        --include='package.json' --include='package-lock.json' \
-        --include='.env.example' --include='.gitignore' \
-        --include='README.md' --include='VERSION' \
-        --exclude='*' \
-        ./ "$DEPLOY_DIR/"
+    sync_code
     chown -R "$DEPLOY_USER:$DEPLOY_GROUP" "$DEPLOY_DIR"
 
     # Cartella log richiesta dall'hardening systemd (ReadWritePaths=/opt/.../logs)
@@ -317,12 +326,15 @@ do_caddy() {
 }
 
 # ============================================================
-# --update : aggiornamento in-place
+# --update : aggiornamento in-place (git pull nel clone + rsync + npm + restart)
 # ============================================================
+# Il `git pull` va fatto nel CLONE (directory da cui si lancia deploy.sh),
+# NON in $DEPLOY_DIR (/opt/paroleMutanti), che è una copia rsync senza .git.
 do_update() {
     require_root
-    echo "[update] git pull + npm install --production + restart..."
-    (cd "$DEPLOY_DIR" && git pull --ff-only)
+    echo "[update] git pull + rsync + npm install --production + restart..."
+    git pull --ff-only
+    sync_code
     (cd "$DEPLOY_DIR" && npm install --production)
     systemctl restart parole-mutanti
     echo "[update] FATTO."

@@ -64,6 +64,10 @@ npm run dev
 > La **guida passo-passo completa** è in [`deploy/README.md`](deploy/README.md)
 > (architettura, primo deploy, verifica, aggiornamenti, backup).
 
+> **Modello a due repository**: `paroleMutanti` (dev, privato) e `paroleMutanti_prod`
+> (prod, pubblico). Il sync dev→prod avviene **solo su richiesta** con `./sync-to-prod.sh`
+> (whitelist rsync), poi si committa e pusha nel repo prod. Vedi `.clinerules/04-git.md`.
+
 Sintesi essenziale:
 
 ```bash
@@ -85,11 +89,16 @@ ti chiederà solo la chiave DeepSeek (opzionale); crea poi utente/DB, schema e d
 Verifica: `curl https://example.com/health`
 
 Aggiornamenti: `sudo ./deploy/deploy.sh --update`
+(git pull nel clone + rsync dei file in `/opt/paroleMutanti` + `npm install --production` + restart)
 
 Variabili principali (in produzione, su `/etc/parole-mutanti/.env`):
 - `NODE_ENV=production`, `HOST=127.0.0.1`, `PORT=<porta>` (default `8090`)
 - `DATABASE_URL`, `DEEPSEEK_API_KEY`, `SESSION_SECRET`
 - `CORS_ORIGIN` limitato al dominio di produzione
+
+> **Versione Node**: usare la **stessa versione** tra dev e prod (dev usa nvm v24).
+> Il pacchetto `nodejs` di apt installa la versione della distro, che può essere più
+> vecchia. In produzione allineare a v24 (vedi `deploy/README.md` → "Versione Node").
 
 ## 📂 Struttura repo
 

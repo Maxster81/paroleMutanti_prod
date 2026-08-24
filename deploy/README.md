@@ -62,8 +62,29 @@ systemctl status parole-mutanti
 
 ```bash
 cd /home/<user>/paroleMutanti_prod   # (o dove hai clonato)
-sudo ./deploy/deploy.sh --update            # git pull --ff-only + npm install + restart
+sudo ./deploy/deploy.sh --update            # git pull (nel clone) + rsync + npm install --production + restart
 ```
+
+> `--update` esegue, in ordine: `git pull --ff-only` nella **directory corrente** (il clone),
+> l'rsync dei file di produzione in `/opt/paroleMutanti`, `npm install --production` e il
+> restart del servizio. Il `git pull` NON va fatto in `/opt/paroleMutanti` (è una copia senza `.git`).
+
+## 🟢 Versione Node
+
+- **Dev** usa Node **v24** via nvm (`/home/<user>/.nvm/.../node`).
+- **`deploy.sh --install`** installa il pacchetto `nodejs` di **apt**, che prende la versione
+  della distro Ubuntu (es. `22.22.1`), potenzialmente **più vecchia** di dev.
+- Per coerenza, allineare la produzione a **v24** (opzionale ma consigliato). Il modo più
+  semplice è il **repo NodeSource v24**:
+
+  ```bash
+  curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
+  sudo apt-get install -y nodejs
+  node --version   # deve uscire v24.x
+  sudo systemctl restart parole-mutanti
+  ```
+
+- Verifica: `node --version` e `curl http://127.0.0.1:8090/health`.
 
 ## 💾 Backup
 - Installato **automaticamente** al deploy (cron ogni notte alle 3:00).
