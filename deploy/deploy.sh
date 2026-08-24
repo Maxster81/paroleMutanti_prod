@@ -369,8 +369,18 @@ do_caddy() {
 # NON in $DEPLOY_DIR (/opt/paroleMutanti), che è una copia rsync senza .git.
 do_update() {
     require_root
-    echo "[update] git pull + rsync + npm install --production + schema + restart..."
-    git pull --ff-only
+    # FOOTGUN: `git pull` dentro uno script in esecuzione aggiorna il file su
+    # disco ma NON la copia già caricata in memoria → bash eseguirebbe ancora la
+    # versione vecchia. Per caricare SEMPRE l'ultima versione, al primo giro
+    # facciamo pull e poi ci ri-eseguiamo con `exec`; la seconda esecuzione
+    # (guardata da PAROLE_REEXECED) procede con l'update vero.
+    if [ -z "${PAROLE_REEXECED:-}" ]; then
+        echo "[update] git pull + ri-esecuzione per caricare l'ultima versione dello script..."
+        git pull --ff-only
+        export PAROLE_REEXECED=1
+        exec "$0" --update
+    fi
+    echo "[update] rsync + npm install --production + schema + restart..."
     sync_code
     (cd "$DEPLOY_DIR" && npm install --production)
     # Applica lo schema (idempotente): crea eventuali tabelle nuove (es. feedback)
