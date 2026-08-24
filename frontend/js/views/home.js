@@ -57,9 +57,9 @@ export function renderHome(params = {}) {
 
       <p class="text-muted text-small">
         Stato:
-        <span class="badge ${s.connessione === 'online' ? 'badge-success' : s.connessione === 'connecting' ? 'badge-warn' : 'badge-error'}">${s.connessione}</span>
-        · <span class="badge badge-muted">${s.tema}</span>
-        · audio <span class="badge ${s.audioAbilitato ? 'badge-success' : 'badge-muted'}">${s.audioAbilitato ? 'on' : 'off'}</span>
+        <span class="badge ${s.connessione === 'online' ? 'badge-success' : s.connessione === 'connecting' ? 'badge-warn' : 'badge-error'}" id="stato-connessione">${s.connessione}</span>
+        · <span class="badge badge-muted" id="stato-tema">${s.tema}</span>
+        · audio <span class="badge ${s.audioAbilitato ? 'badge-success' : 'badge-muted'}" id="stato-audio">${s.audioAbilitato ? 'on' : 'off'}</span>
       </p>
 
       <a class="home-feedback" href="#feedback">

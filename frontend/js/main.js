@@ -80,6 +80,36 @@ function toggleSound() {
 if (soundToggle) soundToggle.addEventListener('click', toggleSound);
 refreshSoundIcon();
 
+// ============================================================
+// Aggiornamento reattivo icona header + badge home su cambio stato
+// (connessione, tema, audio). Prima icona suono/tema e badge home non si
+// aggiornavano finché non cambiava rotta (stato smarrito nel toggle).
+// ============================================================
+function aggiornaBadgeHome(stato) {
+  if (!window.location.hash.startsWith('#home')) return;
+  const elConn = document.getElementById('stato-connessione');
+  const elTema = document.getElementById('stato-tema');
+  const elAudio = document.getElementById('stato-audio');
+  if (elConn) {
+    elConn.className = `badge ${stato.connessione === 'online' ? 'badge-success' : stato.connessione === 'connecting' ? 'badge-warn' : 'badge-error'}`;
+    elConn.textContent = stato.connessione;
+  }
+  if (elTema) {
+    elTema.textContent = stato.tema;
+  }
+  if (elAudio) {
+    elAudio.className = `badge ${stato.audioAbilitato ? 'badge-success' : 'badge-muted'}`;
+    elAudio.textContent = stato.audioAbilitato ? 'on' : 'off';
+  }
+}
+
+state.subscribe((stato) => {
+  refreshStatusDot(stato.connessione);
+  refreshThemeIcon();
+  refreshSoundIcon();
+  aggiornaBadgeHome(stato);
+});
+
 /* ============================================================
    Router
    ============================================================ */
