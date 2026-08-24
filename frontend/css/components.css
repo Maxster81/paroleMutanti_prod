@@ -215,6 +215,18 @@
   user-select: all;
 }
 
+/* Variante cliccabile (condivisione link partita) */
+.code-display--clickable {
+  cursor: pointer;
+}
+.code-display--clickable:hover {
+  filter: brightness(1.08);
+}
+.code-display--clickable:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
 /* --- Badge status --- */
 .badge {
   display: inline-block;

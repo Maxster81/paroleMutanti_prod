@@ -38,12 +38,12 @@ export function renderLobby(params = {}) {
     <div class="lobby-view">
       <div class="lobby-header">
         <div class="lobby-code">CODICE PARTITA</div>
-        <div class="code-display" id="game-code">${escapeHtml(partita.id || '')}</div>
+        <div class="code-display code-display--clickable" id="game-code" role="button" tabindex="0" aria-label="Condividi il link della partita">${escapeHtml(partita.id || '')}</div>
         <div class="lobby-status">
           <span class="badge ${partita.state === 'running' ? 'badge-success' : 'badge-warn'}">${partita.state || 'waiting'}</span>
           <span class="text-small text-dim">${giocatori.length}/${cfg.max_players || '?'} giocatori</span>
         </div>
-        <p class="text-small text-muted" style="margin-top: var(--spacing-sm);">Condividi questo codice con i tuoi amici</p>
+        <p class="text-small text-muted" style="margin-top: var(--spacing-sm);">👆 Tocca il codice per condividere il link della partita</p>
       </div>
 
       <div class="card">
@@ -129,6 +129,50 @@ export function attachLobbyHandlers() {
         navigate('#home');
       }
     });
+  }
+
+  // Condivisione del link partita (Web Share API con fallback copia)
+  const codeDisplay = document.getElementById('game-code');
+  if (codeDisplay) {
+    codeDisplay.addEventListener('click', () => condividiPartita());
+    codeDisplay.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter' || ev.key === ' ') {
+        ev.preventDefault();
+        condividiPartita();
+      }
+    });
+  }
+}
+
+/**
+ * Condivide il link della partita via Web Share API (nativo) o, in fallback,
+ * copiandolo negli appunti. Il link apre direttamente "Unisciti" col codice
+ * pre-compilato (#join?gameId=...).
+ */
+async function condividiPartita() {
+  audioClick();
+  const s = state.get();
+  const partita = s.partita;
+  if (!partita || !partita.id) return;
+
+  const url = `${window.location.origin}/#join?gameId=${encodeURIComponent(partita.id)}`;
+  const text = 'Unisciti alla mia partita di Parole Mutanti!';
+
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: 'Parole Mutanti', text, url });
+    } catch (err) {
+      // L'utente ha annullato la condivisione → non fare nulla
+    }
+    return;
+  }
+
+  // Fallback: copia del link negli appunti
+  try {
+    await navigator.clipboard.writeText(url);
+    alert('Link della partita copiato negli appunti!\nCondividilo con i tuoi amici.');
+  } catch (err) {
+    prompt('Copia questo link da condividere:', url);
   }
 }
 

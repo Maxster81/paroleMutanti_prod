@@ -31,7 +31,9 @@ export function renderCreate(params = {}) {
             <option value="2">2 giocatori</option>
             <option value="3">3 giocatori</option>
             <option value="4" selected>4 giocatori</option>
+            <option value="5">5 giocatori</option>
             <option value="6">6 giocatori</option>
+            <option value="7">7 giocatori</option>
             <option value="8">8 giocatori</option>
           </select>
           <p class="form-help">Inclusi tu. Servono almeno 2 per iniziare.</p>

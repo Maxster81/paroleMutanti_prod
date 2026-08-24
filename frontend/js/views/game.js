@@ -71,7 +71,7 @@ export function renderGame(params = {}) {
       ${ioSonoTurnista ? `
         <form id="submit-form" style="margin-top: var(--spacing-md);">
           <div class="form-group">
-            <input class="form-input" type="text" id="input-parola" placeholder="La tua parola (a distanza 1)" autocomplete="off" autocapitalize="none" spellcheck="false" autofocus>
+            <input class="form-input" type="text" id="input-parola" placeholder="La tua parola (a distanza 1)" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" autofocus>
           </div>
           <div id="submit-error" class="alert alert-error" style="display: none;"></div>
           <div id="submit-info" class="alert alert-info" style="display: none;"></div>
