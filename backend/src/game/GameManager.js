@@ -303,7 +303,9 @@ export class GameManager extends EventEmitter {
         turno: partita.turnManager.turno,
         timestamp: Date.now(),
       });
-      partita.lastActivityAt = new Date();
+      // NB: NON aggiornare lastActivityAt qui: i pareggi automatici (anche con
+      // 0 socket) non devono contare come "attività", altrimenti lo sweeper non
+      // ripulisce mai una partita orfana bloccata su pareggi infiniti (regola 08).
       // M5b-fix: turn_update con stato CORRETTO (post-pareggio) per allineare
       // anche i client con socket.js "vecchio" (che ascoltano solo turn_update,
       // non round_start/pareggio). Non è "stale": nuova parola e turnista sono già
@@ -335,7 +337,9 @@ export class GameManager extends EventEmitter {
     partita.turnManager.giocatori = passati.filter(n => partita.giocatori.includes(n));
     partita.turnManager.nuovoTurno(nuovaParola);
     partita.currentWord = nuovaParola;
-    partita.lastActivityAt = new Date();
+    // lastActivityAt non viene aggiornato qui: se c'è un "passato" lo ha già
+    // fatto submitParola; così le transizioni automatiche di fine turno non
+    // contano come attività ai fini dello sweeper (partite orfane ripulite).
     this.emit('turn_update', { gameId, stato: partita.turnManager.statoCorrente() });
   }
 
