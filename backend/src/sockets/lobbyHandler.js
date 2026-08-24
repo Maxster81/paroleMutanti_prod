@@ -49,13 +49,12 @@ export function registraSocketInPartita(socket, gameId, partita) {
 
 /**
  * Broadcast helper: invia evento a tutti i socket presenti in una partita.
+ * F5: usa le room (`lobby:gameId` e `game:gameId`) già joinate dai socket
+ * (vedi registraSocketInPartita) invece di iterare manualmente la mappa
+ * socketToGame (O(n) su tutti i socket). Più pulito e a lookup O(1).
  */
 export function broadcastAPartita(io, gameId, evento, payload) {
-  for (const [socketId, gid] of socketToGame.entries()) {
-    if (gid === gameId) {
-      io.to(socketId).emit(evento, payload);
-    }
-  }
+  io.to(`lobby:${gameId}`).to(`game:${gameId}`).emit(evento, payload);
 }
 
 /**

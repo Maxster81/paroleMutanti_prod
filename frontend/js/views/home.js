@@ -161,7 +161,7 @@ function caricaListaPartite() {
           <div class="player-name">${escapeHtml(p.creator)}</div>
           <div class="text-small text-dim">${p.giocatori.length}/${p.params.max_players} giocatori · ${p.params.turn_seconds}s/turno</div>
         </div>
-        <button class="btn btn-sm btn-secondary btn-join-game" data-game-id="${p.id}">Unisciti</button>
+        <button class="btn btn-sm btn-secondary btn-join-game" data-game-id="${escapeHtml(p.id)}">Unisciti</button>
       </div>
     `).join('');
 

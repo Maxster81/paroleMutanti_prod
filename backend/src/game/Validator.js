@@ -109,7 +109,7 @@ export async function validaMossa({ parolaPrecedente, parolaNuova, gameId, parol
     const presenti = await paroleEsistenti(candidati);
     if (presenti.size > 0) {
       const lemma = candidati.find((c) => presenti.has(c));
-      logger.info('parola_accettata_morfologia', { parola: normalizzata, lemma });
+      logger.info('parola_accettata_morfologia', { lemma });
       return {
         valida: true,
         motivo: null,

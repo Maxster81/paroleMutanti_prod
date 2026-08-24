@@ -57,7 +57,7 @@ export async function scegliParolaIniziale(min, max) {
   for (let tentativo = 0; tentativo < 5; tentativo++) {
     const parole = await paroleCasuali(lunghezzaScelta, 1);
     if (parole.length > 0) {
-      logger.info('parola_iniziale_scelta', { parola: parole[0], lunghezza: lunghezzaScelta });
+      logger.info('parola_iniziale_scelta', { lunghezza: lunghezzaScelta });
       return parole[0];
     }
   }

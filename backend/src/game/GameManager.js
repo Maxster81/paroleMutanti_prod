@@ -62,6 +62,14 @@ export class GameManager extends EventEmitter {
     if (turnSeconds < 5 || turnSeconds > 60) {
       return { ok: false, errore: 'turn_seconds_non_valido' };
     }
+    // F4: validazione server-side anche per gli altri parametri (non solo
+    // maxPlayers/turnSeconds), così un client non può forzare valori fuori range.
+    if (gamesToWin < 1 || gamesToWin > 4) {
+      return { ok: false, errore: 'games_to_win_non_valido' };
+    }
+    if (initialLengthMin < 3 || initialLengthMax > 10 || initialLengthMin > initialLengthMax) {
+      return { ok: false, errore: 'initial_length_non_valido' };
+    }
 
     const nome = creator.trim();
     for (const p of this.partite.values()) {
@@ -123,6 +131,7 @@ export class GameManager extends EventEmitter {
     if (partita.state !== 'waiting') return { ok: false, errore: 'partita_gia_iniziata' };
     const idx = partita.giocatori.indexOf(nome);
     if (idx === -1) return { ok: false, errore: 'giocatore_non_in_partita' };
+    if (typeof ready !== 'boolean') return { ok: false, errore: 'ready_non_valido' };
     partita.ready[idx] = ready;
     partita.lastActivityAt = new Date();
     const tuttiProni = partita.ready.every((r) => r) && partita.giocatori.length >= 2;
@@ -229,7 +238,7 @@ export class GameManager extends EventEmitter {
       logger.info('mossa_validata', { gameId, giocatore: nomeGiocatore, source: risultato.source, ai_usata: !!risultato.ai_usata });
     } else {
       this.emit('mossa_rifiutata', { gameId, partita, parola, motivo: risultato.motivo });
-      logger.info('mossa_rifiutata', { gameId, giocatore: nomeGiocatore, parola, motivo: risultato.motivo });
+      logger.info('mossa_rifiutata', { gameId, giocatore: nomeGiocatore, motivo: risultato.motivo });
     }
 
     return {

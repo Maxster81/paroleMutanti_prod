@@ -13,6 +13,7 @@
 
 import pg from 'pg';
 import { config } from '../config.js';
+import { logger } from '../logger.js';
 
 const { Pool } = pg;
 
@@ -33,7 +34,7 @@ pool.on('connect', () => {
 });
 
 pool.on('error', (err) => {
-  console.error('[db] ❌ Errore inatteso sul pool:', err.message);
+  logger.error('pool_error', { errore: err.message });
 });
 
 /**
@@ -47,7 +48,7 @@ export async function query(text, params) {
   const result = await pool.query(text, params);
   const durata = Date.now() - inizio;
   if (durata > 500) {
-    console.warn(`[db] ⚠️  Query lenta (${durata}ms): ${text.substring(0, 100)}`);
+    logger.warn('query_lenta', { durataMs: durata, query: text.substring(0, 100) });
   }
   return result;
 }
@@ -81,5 +82,5 @@ export async function withTransaction(callback) {
  */
 export async function closePool() {
   await pool.end();
-  console.log('[db] Pool chiuso.');
+  logger.info('pool_chiuso');
 }

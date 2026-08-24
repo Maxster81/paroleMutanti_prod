@@ -10,6 +10,7 @@
  */
 
 import 'dotenv/config';
+import { logger } from './logger.js';
 
 /**
  * Converte una stringa env in intero, con default e validazione.
@@ -60,15 +61,12 @@ function validaConfig(cfg) {
   } else {
     // Dev: solo warning, non blocchiamo
     if (cfg.deepseek.apiKey.startsWith('sk-INSERISCI')) {
-      console.warn('⚠️  [config] DEEPSEEK_API_KEY placeholder: il fallback AI sarà disattivato finché non la imposti');
+      logger.warn('DEEPSEEK_API_KEY placeholder: il fallback AI sarà disattivato finché non la imposti');
     }
   }
 
   if (errori.length > 0) {
-    console.error('❌ [config] Errori di configurazione:');
-    for (const err of errori) {
-      console.error(`   - ${err}`);
-    }
+    logger.error('errori_di_configurazione', { errori });
     process.exit(1);
   }
 }
@@ -115,7 +113,11 @@ export const config = (() => {
     // Sicurezza
     security: {
       sessionSecret: process.env.SESSION_SECRET || '',
-      corsOrigin: process.env.CORS_ORIGIN || '*',
+      // CORS: in dev aperto ('*'); in produzione va limitato al dominio via
+      // CORS_ORIGIN (regola .clinerules/05-security). Se non impostato in prod,
+      // resta vuoto → nessuna origine cross-origin consentita (l'app è servita
+      // same-origin dietro Caddy, quindi il CORS non è necessario).
+      corsOrigin: process.env.CORS_ORIGIN || (process.env.NODE_ENV === 'production' ? '' : '*'),
       socketPayloadLimit: '100kb',
     },
   };
