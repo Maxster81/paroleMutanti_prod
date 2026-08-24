@@ -49,7 +49,7 @@ function validaConfig(cfg) {
     errori.push('DATABASE_URL è obbligatorio');
   }
   if (cfg.nodeEnv === 'production') {
-    if (!cfg.sessionSecret || cfg.sessionSecret.length < 32) {
+    if (!cfg.security.sessionSecret || cfg.security.sessionSecret.length < 32) {
       errori.push('SESSION_SECRET deve essere almeno 32 caratteri in produzione');
     }
     // Chiave DeepSeek OPZIONALE in produzione: vuota = fallback AI disattivato.
