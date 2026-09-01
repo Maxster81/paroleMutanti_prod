@@ -28,8 +28,8 @@ export function attachGameHandlers(io, socket) {
       return ack?.({ ok: false, errore: 'parametri_mancanti' });
     }
 
-    const partita = gameManager.getPartita(gameId);
-    if (!partita) return ack?.({ ok: false, errore: 'partita_non_trovata' });
+    const match = gameManager.getMatch(gameId);
+    if (!match) return ack?.({ ok: false, errore: 'partita_non_trovata' });
 
     // M3: broadcast "verifica in corso" se la parola non è nel DB
     // (e quindi probabile chiamata AI). Il client può mostrare un loader.
@@ -51,8 +51,8 @@ export function attachGameHandlers(io, socket) {
       // in corso). Quando il round chiude il turno (attivo=false) NON emettere
       // qui: _gestisciFineTurno è async e lo stato sarebbe "stale"; in quel
       // caso lo stato corretto arriva da GameManager (pareggio/eliminazione).
-      if (partita.turnManager && partita.turnManager.attivo) {
-        const statoTurno = partita.turnManager.statoCorrente();
+      if (match.turnManager && match.turnManager.attivo) {
+        const statoTurno = match.turnManager.statoCorrente();
         broadcastAPartita(io, gameId, 'turn_update', {
           gameId,
           ...statoTurno,
@@ -65,15 +65,18 @@ export function attachGameHandlers(io, socket) {
         });
       }
 
-      if (partita.state === 'finished') {
+      if (match.state === 'finished') {
         broadcastAPartita(io, gameId, 'game_over', {
           gameId,
-          vincitore: partita.vincitore,
-          history: partita.history,
-          durataMs: partita.endedAt - partita.startedAt,
-          aiValidationsCount: partita.aiValidationsCount,
+          vincitore: match.vincitore,
+          history: match.history,
+          durataMs: match.endedAt - match.startedAt,
+          aiValidationsCount: match.aiValidationsCount,
+          punteggio: match.punteggio,
+          gamesToWin: match.gamesToWin,
+          manche: match.mancheCorrente,
         });
-        setTimeout(() => gameManager.rimuoviPartita(gameId), 5000);
+        setTimeout(() => gameManager.rimuoviMatch(gameId), 5000);
       }
     } else {
       broadcastAPartita(io, gameId, 'mossa_rifiutata', {
@@ -102,9 +105,9 @@ export function attachGameHandlers(io, socket) {
     // Quando il passaggio chiude il turno (attivo=false) NON emettere qui:
     // _gestisciFineTurno è async e lo stato sarebbe "stale"; in quel caso lo
     // stato corretto arriva da GameManager (pareggio/eliminazione) via turn_update.
-    const partita = gameManager.getPartita(gameId);
-    if (partita && partita.turnManager && partita.turnManager.attivo) {
-      const statoTurno = partita.turnManager.statoCorrente();
+    const match = gameManager.getMatch(gameId);
+    if (match && match.turnManager && match.turnManager.attivo) {
+      const statoTurno = match.turnManager.statoCorrente();
       broadcastAPartita(io, gameId, 'turn_update', { gameId, ...statoTurno, passaggio: true });
     }
     ack?.({ ok: true });
@@ -113,31 +116,31 @@ export function attachGameHandlers(io, socket) {
   // request_state
   socket.on('request_state', (payload, ack) => {
     const { gameId } = payload || {};
-    const partita = gameId ? gameManager.getPartita(gameId) : null;
-    if (!partita) return ack?.({ ok: false, errore: 'partita_non_trovata' });
+    const match = gameId ? gameManager.getMatch(gameId) : null;
+    if (!match) return ack?.({ ok: false, errore: 'partita_non_trovata' });
 
     // M5-bugfix3: al refresh (nuovo socket) il socket NON è nella room né
     // registrato nel tracking socketToGame. Senza questo ri-aggancio, i
     // broadcast (io.to(socketId)) non raggiungono più il client dopo il
     // refresh → counter fermo, mosse degli altri non visibili.
-    registraSocketInPartita(socket, gameId, partita);
+    registraSocketInPartita(socket, gameId, match);
 
     // M5-bugfix3: include id/gameId nello stato. Senza di essi, dopo il
     // refresh la view game invierebbe submit_word con gameId undefined
     // → server risponde "parametri_mancanti" → errore generico lato client.
-    const stato = partita.turnManager
-      ? { id: partita.id, gameId: partita.id, ...partita.turnManager.statoCorrente(), state: partita.state, vincitore: partita.vincitore, giocatori: partita.giocatori }
-      : { id: partita.id, gameId: partita.id, state: partita.state, giocatori: partita.giocatori, ready: partita.ready, params: partita.params };
+    const stato = match.turnManager
+      ? { id: match.id, gameId: match.id, ...match.turnManager.statoCorrente(), state: match.state, vincitore: match.vincitore, giocatori: match.giocatori }
+      : { id: match.id, gameId: match.id, state: match.state, giocatori: match.giocatori, ready: match.ready, params: match.params };
     ack?.({ ok: true, stato });
   });
 }
 
 export function setupGameManagerBroadcast(io) {
-  gameManager.on('mossa_validata', ({ gameId, parola, partita }) => {
+  gameManager.on('mossa_validata', ({ gameId, parola, match }) => {
     logger.debug('mossa_validata_broadcast', { gameId, parola });
   });
 
-  gameManager.on('mossa_rifiutata', ({ gameId, parola, motivo, partita }) => {
+  gameManager.on('mossa_rifiutata', ({ gameId, parola, motivo, match }) => {
     broadcastAPartita(io, gameId, 'mossa_rifiutata', { gameId, parola, motivo });
   });
 
@@ -183,27 +186,41 @@ export function setupGameManagerBroadcast(io) {
     broadcastAPartita(io, gameId, 'turn_resumed', { gameId, ...data });
   });
 
-  gameManager.on('giocatore_eliminato', ({ gameId, nome, partita }) => {
+  gameManager.on('giocatore_eliminato', ({ gameId, nome, match }) => {
     broadcastAPartita(io, gameId, 'giocatore_eliminato', {
       gameId,
       nome,
-      giocatoriRimanenti: partita.giocatori,
+      giocatoriRimanenti: match.giocatori,
     });
   });
 
-  gameManager.on('partita_finita', (partita) => {
-    broadcastAPartita(io, partita.id, 'game_over', {
-      gameId: partita.id,
-      vincitore: partita.vincitore,
-      history: partita.history,
-      durataMs: partita.endedAt - partita.startedAt,
-      aiValidationsCount: partita.aiValidationsCount,
-    });
-    setTimeout(() => gameManager.rimuoviPartita(partita.id), 5000);
+  // Best-of-N (manche ↔ match)
+  gameManager.on('manche_finita', (data) => {
+    broadcastAPartita(io, data.gameId, 'manche_finita', data);
+  });
+  gameManager.on('manche_start', (data) => {
+    broadcastAPartita(io, data.gameId, 'manche_start', data);
+  });
+  gameManager.on('punteggio_aggiornato', (data) => {
+    broadcastAPartita(io, data.gameId, 'punteggio_aggiornato', data);
   });
 
-  gameManager.on('partita_cancellata', (partita) => {
-    broadcastAPartita(io, partita.id, 'partita_cancellata', { gameId: partita.id });
-    setTimeout(() => gameManager.rimuoviPartita(partita.id), 5000);
+  gameManager.on('partita_finita', (match) => {
+    broadcastAPartita(io, match.id, 'game_over', {
+      gameId: match.id,
+      vincitore: match.vincitore,
+      history: match.history,
+      durataMs: match.endedAt - match.startedAt,
+      aiValidationsCount: match.aiValidationsCount,
+      punteggio: match.punteggio,
+      gamesToWin: match.gamesToWin,
+      manche: match.mancheCorrente,
+    });
+    setTimeout(() => gameManager.rimuoviMatch(match.id), 5000);
+  });
+
+  gameManager.on('partita_cancellata', (match) => {
+    broadcastAPartita(io, match.id, 'partita_cancellata', { gameId: match.id });
+    setTimeout(() => gameManager.rimuoviMatch(match.id), 5000);
   });
 }

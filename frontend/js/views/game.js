@@ -44,14 +44,30 @@ export function renderGame(params = {}) {
   const mioNome = localStorage.getItem('pm-nome') || '';
   const ioSonoTurnista = giocatore === mioNome;
 
+  // Best-of-N
+  const manche = partita.manche ?? (partita.mancheCorrente ?? 1);
+  const gamesToWin = partita.gamesToWin ?? 1;
+  const punteggio = partita.punteggio || {};
+  const tentativiRimasti = Math.max(0, (partita.maxTentativi ?? 3) - (partita.tentativi ?? 0));
+
   // Lista giocatori rimasti (quella dal server, se presente; altrimenti da partita.giocatori)
   const giocatoriRimasti = partita.giocatori || [];
 
   return `
     <div class="form-view game-view" style="text-align: center;">
       <div class="turno-counter" id="turno-counter" style="font-size: 0.95rem; font-weight: 700; color: var(--primary); margin-bottom: var(--spacing-sm); text-transform: uppercase; letter-spacing: 0.5px;">
-        TURNO ${partita.turno ?? 1} · Round ${partita.round ?? 1}/${partita.roundsTotali ?? (partita.giocatori?.length ?? 1)}
+        TURNO ${partita.turno ?? 1} · MANO ${partita.round ?? 1}/${partita.roundsTotali ?? (partita.giocatori?.length ?? 1)} · MANCHE ${manche}/${gamesToWin}
       </div>
+
+      <div class="card" style="margin-top: var(--spacing-sm); text-align: left;">
+        <div class="text-small text-dim">🏅 Punteggio (manche vinte)</div>
+        <div class="text-small">
+          ${Object.entries(punteggio).length
+            ? Object.entries(punteggio).map(([n, v]) => `<span style="margin-right: 10px;">${escapeHtml(n)}: <strong>${v}</strong></span>`).join('')
+            : '<span class="text-dim">0 punti</span>'}
+        </div>
+      </div>
+
       <div class="timer-circle ${timerClass}" id="timer-circle">
         <div class="timer-text" id="timer-text">${timeLeft}</div>
       </div>
@@ -76,9 +92,10 @@ export function renderGame(params = {}) {
           <div id="submit-error" class="alert alert-error" style="display: none;"></div>
           <div id="submit-info" class="alert alert-info" style="display: none;"></div>
           <div id="verifica-box" class="alert alert-success" style="display: none;">🔎 Verifica in corso…</div>
+          <div id="tentativi-info" class="text-small text-dim" style="margin: 6px 0;">${tentativiRimasti} tentativi rimasti</div>
           <div class="form-actions">
             <button type="submit" class="btn btn-primary btn-block" id="btn-submit-word">📤 Invia parola</button>
-            <button type="button" class="btn btn-ghost btn-block" id="btn-pass">⏭ Passa il round</button>
+            <button type="button" class="btn btn-ghost btn-block" id="btn-pass">⏭ Passa la mano</button>
           </div>
         </form>
       ` : `
@@ -96,7 +113,7 @@ export function renderGame(params = {}) {
               // Inversione: la più recente in cima, ma numerazione ASSOLUTA
               // (1 = prima parola, ultimo numero = totale della catena).
               const i = paroleScritte.length - 1 - j;
-              const sistemica = h.giocatore === '(iniziale)' || h.giocatore === '(pareggio)';
+              const sistemica = h.giocatore === '(iniziale)' || h.giocatore === '(pareggio)' || h.giocatore === '(stallo)';
               return `
                 <div class="text-small" style="margin-top: 4px;${sistemica ? ' opacity: 0.55;' : ''}">
                   <span class="text-dim">${i + 1}.</span> <strong>${escapeHtml(h.parola)}</strong>${h.giocatore ? ` <span class="text-dim">· ${escapeHtml(h.giocatore)}</span>` : ''}

@@ -2,7 +2,7 @@
  * GameManager.js — Gestione stato partite in RAM
  *
  * Singleton che tiene traccia di tutte le partite attive in memoria.
- * Ogni partita è identificata da un gameId (UUID).
+ * Ogni match è identificata da un gameId (UUID).
  *
  * M5-bugfix2: include sweeper automatico per partite abbandonate:
  * - waiting >5min → cancellata
@@ -30,9 +30,9 @@ const SWEEPER_INTERVAL_MS = 60 * 1000;             // ogni 1 min
 export class GameManager extends EventEmitter {
   constructor() {
     super();
-    this.partite = new Map();
-    // Traccia socket connessi per partita (per sweeper "running con 0 socket")
-    this.socketsPerPartita = new Map(); // gameId → Set<socketId>
+    this.matches = new Map();
+    // Traccia socket connessi per match (per sweeper "running con 0 socket")
+    this.socketsPerMatch = new Map(); // gameId → Set<socketId>
 
     // Sweeper automatico
     this.sweeperInterval = setInterval(() => this._sweepAbbandonate(), SWEEPER_INTERVAL_MS);
@@ -43,7 +43,7 @@ export class GameManager extends EventEmitter {
   // CRUD Partite
   // ============================================================
 
-  async creaPartita(opzioni) {
+  async creaMatch(opzioni) {
     const {
       creator,
       maxPlayers = config.game.maxPlayers,
@@ -72,20 +72,24 @@ export class GameManager extends EventEmitter {
     }
 
     const nome = creator.trim();
-    for (const p of this.partite.values()) {
+    for (const p of this.matches.values()) {
       if (p.state === 'waiting' && p.giocatori.includes(nome)) {
-        return { ok: false, errore: 'gia_in_partita', partita: p };
+        return { ok: false, errore: 'gia_in_partita', match: p };
       }
     }
 
     const id = randomUUID();
-    const partita = {
+    const match = {
       id,
       creator: nome,
       giocatori: [nome],
       ready: [false],
       state: 'waiting',
       params: { max_players: maxPlayers, turn_seconds: turnSeconds, games_to_win: gamesToWin, initial_length_min: initialLengthMin, initial_length_max: initialLengthMax },
+      gamesToWin,                          // best-of-N (ora effettivo)
+      mancheCorrente: 1,                   // numero manche in corso
+      punteggio: {},                       // nome → manche vinte
+      giocatoriOriginali: [],              // chi può ancora giocare le manche successive
       currentWord: null,
       currentPlayerIndex: 0,
       history: [],
@@ -98,105 +102,92 @@ export class GameManager extends EventEmitter {
       lastActivityAt: new Date(),
       aiValidationsCount: 0,
     };
-    this.partite.set(id, partita);
-    this.socketsPerPartita.set(id, new Set());
+    this.matches.set(id, match);
+    this.socketsPerMatch.set(id, new Set());
     logger.info('partita_creata', { id, creator: nome, maxPlayers, turnSeconds });
-    this.emit('partita_creata', partita);
-    return { ok: true, partita };
+    this.emit('partita_creata', match);
+    return { ok: true, match };
   }
 
-  uniscitiAPartita(gameId, nome) {
-    const partita = this.partite.get(gameId);
-    if (!partita) return { ok: false, errore: 'partita_non_trovata' };
-    if (partita.state !== 'waiting') return { ok: false, errore: 'partita_gia_iniziata' };
-    if (partita.giocatori.length >= partita.params.max_players) return { ok: false, errore: 'partita_piena' };
+  uniscitiAMatch(gameId, nome) {
+    const match = this.matches.get(gameId);
+    if (!match) return { ok: false, errore: 'partita_non_trovata' };
+    if (match.state !== 'waiting') return { ok: false, errore: 'partita_gia_iniziata' };
+    if (match.giocatori.length >= match.params.max_players) return { ok: false, errore: 'partita_piena' };
     if (!nome || typeof nome !== 'string' || nome.trim().length < 1) {
       return { ok: false, errore: 'nome_non_valido' };
     }
     const nomePulito = nome.trim();
-    if (partita.giocatori.includes(nomePulito)) {
+    if (match.giocatori.includes(nomePulito)) {
       return { ok: false, errore: 'nome_gia_usato' };
     }
-    partita.giocatori.push(nomePulito);
-    partita.ready.push(false);
-    partita.lastActivityAt = new Date();
-    logger.info('giocatore_aggiunto', { gameId, nome: nomePulito, totale: partita.giocatori.length });
-    this.emit('giocatore_aggiunto', partita);
-    return { ok: true, partita };
+    match.giocatori.push(nomePulito);
+    match.ready.push(false);
+    match.lastActivityAt = new Date();
+    logger.info('giocatore_aggiunto', { gameId, nome: nomePulito, totale: match.giocatori.length });
+    this.emit('giocatore_aggiunto', match);
+    return { ok: true, match };
   }
 
   setReady(gameId, nome, ready) {
-    const partita = this.partite.get(gameId);
-    if (!partita) return { ok: false, errore: 'partita_non_trovata' };
-    if (partita.state !== 'waiting') return { ok: false, errore: 'partita_gia_iniziata' };
-    const idx = partita.giocatori.indexOf(nome);
+    const match = this.matches.get(gameId);
+    if (!match) return { ok: false, errore: 'partita_non_trovata' };
+    if (match.state !== 'waiting') return { ok: false, errore: 'partita_gia_iniziata' };
+    const idx = match.giocatori.indexOf(nome);
     if (idx === -1) return { ok: false, errore: 'giocatore_non_in_partita' };
     if (typeof ready !== 'boolean') return { ok: false, errore: 'ready_non_valido' };
-    partita.ready[idx] = ready;
-    partita.lastActivityAt = new Date();
-    const tuttiProni = partita.ready.every((r) => r) && partita.giocatori.length >= 2;
+    match.ready[idx] = ready;
+    match.lastActivityAt = new Date();
+    const tuttiProni = match.ready.every((r) => r) && match.giocatori.length >= 2;
     logger.info('ready_aggiornato', { gameId, nome, ready, tuttiProni });
-    this.emit('ready_aggiornato', partita);
-    return { ok: true, partita, tuttiProni };
+    this.emit('ready_aggiornato', match);
+    return { ok: true, match, tuttiProni };
   }
 
-  getPartita(gameId) { return this.partite.get(gameId); }
+  getMatch(gameId) { return this.matches.get(gameId); }
 
-  listaPartiteAperte() {
-    return Array.from(this.partite.values()).filter((p) => p.state === 'waiting');
+  listaMatchAperti() {
+    return Array.from(this.matches.values()).filter((p) => p.state === 'waiting');
   }
 
-  size() { return this.partite.size; }
+  size() { return this.matches.size; }
 
   // ============================================================
   // Game Lifecycle
   // ============================================================
 
-  async avviaPartita(gameId) {
-    const partita = this.partite.get(gameId);
-    if (!partita) return { ok: false, errore: 'partita_non_trovata' };
-    if (partita.state !== 'waiting') return { ok: false, errore: 'stato_non_valido' };
-    if (partita.giocatori.length < 2) return { ok: false, errore: 'servono_almeno_2_giocatori' };
-    if (!partita.ready.every((r) => r)) return { ok: false, errore: 'non_tutti_pronti' };
+  async avviaMatch(gameId) {
+    const match = this.matches.get(gameId);
+    if (!match) return { ok: false, errore: 'partita_non_trovata' };
+    if (match.state !== 'waiting') return { ok: false, errore: 'stato_non_valido' };
+    if (match.giocatori.length < 2) return { ok: false, errore: 'servono_almeno_2_giocatori' };
+    if (!match.ready.every((r) => r)) return { ok: false, errore: 'non_tutti_pronti' };
 
     try {
       const parolaIniziale = await scegliParolaIniziale(
-        partita.params.initial_length_min,
-        partita.params.initial_length_max
+        match.params.initial_length_min,
+        match.params.initial_length_max
       );
 
-      partita.state = 'running';
-      partita.currentWord = parolaIniziale;
-      partita.startedAt = new Date();
-      partita.currentPlayerIndex = 0;
-      partita.history = [{ parola: parolaIniziale, giocatore: '(iniziale)', turno: 0, timestamp: Date.now() }];
-      partita.paroleUsate = new Set([normalizzaBase(parolaIniziale)]);
-      partita.lastActivityAt = new Date();
+      match.state = 'running';
+      match.currentWord = parolaIniziale;
+      match.startedAt = new Date();
+      match.currentPlayerIndex = 0;
+      // Best-of-N: giocatoriOriginali = chi può giocare le manche (tutti ora).
+      match.giocatoriOriginali = [...match.giocatori];
+      match.punteggio = {};
+      match.mancheCorrente = 1;
+      match.history = [{ parola: parolaIniziale, giocatore: '(iniziale)', turno: 0, manche: 1, timestamp: Date.now() }];
+      match.paroleUsate = new Set([normalizzaBase(parolaIniziale)]);
+      match.lastActivityAt = new Date();
 
-      const turnManager = new TurnManager({
-        giocatori: [...partita.giocatori],
-        secondiPerTurno: partita.params.turn_seconds,
-        parolaIniziale,
-        history: partita.history,
-        onTimeout: () => this._gestisciTimeoutRound(gameId),
-        onTick: (timeLeft, roundIdx) => this.emit('tick', { gameId, timeLeft, turno: turnManager.turno, roundIdx }),
-        onFineTurno: () => this._gestisciFineTurno(gameId),
-      });
-
-      turnManager.on('round_start', (stato) => this.emit('round_start', { gameId, stato }));
-      turnManager.on('round_passato', (data) => this.emit('round_passato', { gameId, ...data }));
-      turnManager.on('round_limbo', (data) => this.emit('round_limbo', { gameId, ...data }));
-      turnManager.on('turno_finito', (data) => this.emit('turno_finito', { gameId, ...data }));
-      turnManager.on('beep', (data) => this.emit('beep', { gameId, ...data }));
-      turnManager.on('paused', (data) => this.emit('paused', { gameId, ...data }));
-      turnManager.on('resumed', (data) => this.emit('resumed', { gameId, ...data }));
-
-      partita.turnManager = turnManager;
+      const turnManager = this._creaTurnManager(gameId, match, parolaIniziale);
+      match.turnManager = turnManager;
       turnManager.start();
 
-      logger.info('partita_avviata', { gameId, parolaIniziale });
-      this.emit('partita_avviata', partita);
-      return { ok: true, partita };
+      logger.info('partita_avviata', { gameId, parolaIniziale, gamesToWin: match.gamesToWin });
+      this.emit('partita_avviata', match);
+      return { ok: true, match };
     } catch (errore) {
       logger.error('avvio_partita_fallito', { gameId, errore: errore.message });
       return { ok: false, errore: errore.message };
@@ -204,41 +195,54 @@ export class GameManager extends EventEmitter {
   }
 
   async submitParola(gameId, nomeGiocatore, parola) {
-    const partita = this.partite.get(gameId);
-    if (!partita) return { ok: false, valida: false, motivo: 'partita_non_trovata' };
-    if (partita.state !== 'running') {
+    const match = this.matches.get(gameId);
+    if (!match) return { ok: false, valida: false, motivo: 'partita_non_trovata' };
+    if (match.state !== 'running') {
       return { ok: false, valida: false, motivo: 'partita_non_in_corso' };
     }
-    if (partita.turnManager.giocatoreCorrente() !== nomeGiocatore) {
+    if (match.turnManager.giocatoreCorrente() !== nomeGiocatore) {
       return { ok: false, valida: false, motivo: 'non_sei_di_turno' };
     }
 
     const risultato = await validaMossa({
-      parolaPrecedente: partita.currentWord,
+      parolaPrecedente: match.currentWord,
       parolaNuova: parola,
       gameId,
-      paroleUsate: partita.paroleUsate,
+      paroleUsate: match.paroleUsate,
       lunghezzaMin: 3,
       lunghezzaMax: 10,
     });
 
+    // La mossa passa SEMPRE da submitMossa (valida o no): così il TurnManager
+    // conteggia i tentativi falliti (regola: 3 errori → limbo) e fa avanzare
+    // il round solo quando serve. Il riferimento PRE-submit serve a capire se
+    // una mossa valida ha chiuso l'ultima mano e fatto partire una NUOVA manche.
+    const tmPrima = match.turnManager;
+    const esitoSubmit = match.turnManager.submitMossa(parola, nomeGiocatore, risultato);
+
     if (risultato.valida) {
-      partita.turnManager.submitMossa(risultato.normalizzata, nomeGiocatore, risultato);
-      partita.currentWord = risultato.normalizzata;
-      partita.paroleUsate.add(risultato.normalizzata);
-      partita.history.push({
-        parola: risultato.normalizzata,
-        giocatore: nomeGiocatore,
-        turno: partita.turnManager.turno,
-        timestamp: Date.now(),
-      });
-      partita.lastActivityAt = new Date();
-      if (risultato.source === 'AI') partita.aiValidationsCount += 1;
-      this.emit('mossa_validata', { gameId, partita, parola: risultato.normalizzata, ai_usata: risultato.ai_usata || false });
+      // Aggiorna lo stato SOLO se la manche è ancora la stessa (stesso TurnManager).
+      if (match.turnManager === tmPrima) {
+        match.currentWord = risultato.normalizzata;
+        match.paroleUsate.add(risultato.normalizzata);
+        match.history.push({
+          parola: risultato.normalizzata,
+          giocatore: nomeGiocatore,
+          turno: match.turnManager.turno,
+          manche: match.mancheCorrente,
+          timestamp: Date.now(),
+        });
+      }
+      match.lastActivityAt = new Date();
+      if (risultato.source === 'AI') match.aiValidationsCount += 1;
+      this.emit('mossa_validata', { gameId, match, parola: risultato.normalizzata, ai_usata: risultato.ai_usata || false });
       logger.info('mossa_validata', { gameId, giocatore: nomeGiocatore, source: risultato.source, ai_usata: !!risultato.ai_usata });
     } else {
-      this.emit('mossa_rifiutata', { gameId, partita, parola, motivo: risultato.motivo });
-      logger.info('mossa_rifiutata', { gameId, giocatore: nomeGiocatore, motivo: risultato.motivo });
+      this.emit('mossa_rifiutata', {
+        gameId, match, parola, motivo: risultato.motivo,
+        tentativi: esitoSubmit?.tentativi, maxTentativi: esitoSubmit?.maxTentativi, limbo: !!esitoSubmit?.limbo,
+      });
+      logger.info('mossa_rifiutata', { gameId, giocatore: nomeGiocatore, motivo: risultato.motivo, tentativi: esitoSubmit?.tentativi, limbo: !!esitoSubmit?.limbo });
     }
 
     return {
@@ -247,17 +251,20 @@ export class GameManager extends EventEmitter {
       motivo: risultato.motivo,
       messaggio: risultato.messaggio,
       source: risultato.source,
+      tentativi: esitoSubmit?.tentativi ?? 0,
+      maxTentativi: esitoSubmit?.maxTentativi ?? 3,
+      limbo: !!esitoSubmit?.limbo,
     };
   }
 
   passaTurno(gameId, nomeGiocatore) {
-    const partita = this.partite.get(gameId);
-    if (!partita) return { ok: false, errore: 'partita_non_trovata' };
-    if (partita.state !== 'running') return { ok: false, errore: 'partita_non_in_corso' };
-    if (partita.turnManager.giocatoreCorrente() !== nomeGiocatore) {
+    const match = this.matches.get(gameId);
+    if (!match) return { ok: false, errore: 'partita_non_trovata' };
+    if (match.state !== 'running') return { ok: false, errore: 'partita_non_in_corso' };
+    if (match.turnManager.giocatoreCorrente() !== nomeGiocatore) {
       return { ok: false, errore: 'non_sei_di_turno' };
     }
-    partita.turnManager.passaTurno(nomeGiocatore);
+    match.turnManager.passaTurno(nomeGiocatore);
     return { ok: true };
   }
 
@@ -267,80 +274,110 @@ export class GameManager extends EventEmitter {
    * La valutazione vera (elim/pareggio/vittoria) avviene in _gestisciFineTurno.
    */
   _gestisciTimeoutRound(gameId) {
-    const partita = this.partite.get(gameId);
-    if (!partita || partita.state !== 'running') return;
-    this.emit('turno_scaduto', { gameId, giocatore: partita.turnManager?.giocatoreCorrente() });
+    const match = this.matches.get(gameId);
+    if (!match || match.state !== 'running') return;
+    this.emit('turno_scaduto', { gameId, giocatore: match.turnManager?.giocatoreCorrente() });
   }
 
   /**
-   * Fine turno: applica le regole del modello round/turno/limbo.
-   *  - Tutti in limbo → pareggio, nuova parola base, tutti restano in gioco.
+   * Costruisce un TurnManager per una manche (avvio o nuova manche).
+   * Centralizza callback ed eventi per non duplicare la logica.
+   *
+   * @param {string} gameId
+   * @param {object} match
+   * @param {string} parolaIniziale
+   * @returns {import('./TurnManager.js').TurnManager}
+   */
+  _creaTurnManager(gameId, match, parolaIniziale) {
+    let turnManager = null;
+    turnManager = new TurnManager({
+      giocatori: [...match.giocatori],
+      secondiPerTurno: match.params.turn_seconds,
+      parolaIniziale,
+      history: match.history,
+      maxTentativi: 3, // regola: 3 tentativi per mano
+      onTimeout: () => this._gestisciTimeoutRound(gameId),
+      onTick: (timeLeft, roundIdx) => this.emit('tick', { gameId, timeLeft, turno: turnManager.turno, roundIdx }),
+      onFineTurno: () => this._gestisciFineTurno(gameId),
+    });
+
+    turnManager.on('round_start', (stato) => this.emit('round_start', { gameId, stato }));
+    turnManager.on('round_passato', (data) => this.emit('round_passato', { gameId, ...data }));
+    turnManager.on('round_limbo', (data) => this.emit('round_limbo', { gameId, ...data }));
+    turnManager.on('turno_finito', (data) => this.emit('turno_finito', { gameId, ...data }));
+    turnManager.on('beep', (data) => this.emit('beep', { gameId, ...data }));
+    turnManager.on('paused', (data) => this.emit('paused', { gameId, ...data }));
+    turnManager.on('resumed', (data) => this.emit('resumed', { gameId, ...data }));
+    return turnManager;
+  }
+
+  /**
+   * Fine turno: applica le regole del modello mano/turno/limbo.
+   *  - Tutti in limbo → stallo, nuova parola base, tutti restano in gioco.
    *  - Almeno un passato → i limbo vengono eliminati; se i passati sono 1 solo,
-   *    quello vince; altrimenti prosegue con l'ultima parola valida.
+   *    il giocatore vince la MANCHE; altrimenti prosegue con l'ultima parola valida.
    */
   async _gestisciFineTurno(gameId) {
-    const partita = this.partite.get(gameId);
-    if (!partita || partita.state !== 'running') return;
+    const match = this.matches.get(gameId);
+    if (!match || match.state !== 'running') return;
 
-    const rounds = partita.turnManager.rounds;
-    const passati = rounds.filter(r => r.stato === 'passato').map(r => r.giocatore);
-    const limbi = rounds.filter(r => r.stato === 'limbo').map(r => r.giocatore);
+    const rounds = match.turnManager.rounds;
+    // Escludi dal conteggio i giocatori non più attivi (es. abbandonati): i loro
+    // round già registrati non devono influire su vittoria/eliminazione.
+    const attivi = new Set(match.giocatori);
+    const passatiRounds = rounds.filter(r => r.stato === 'passato' && attivi.has(r.giocatore));
+    const passati = passatiRounds.map(r => r.giocatore);
+    const limbi = rounds.filter(r => r.stato === 'limbo' && attivi.has(r.giocatore)).map(r => r.giocatore);
 
-    // Caso 1: tutti in limbo → pareggio
+    // Caso 1: tutti in limbo → stallo (nuova parola, nessun eliminato)
     if (passati.length === 0) {
-      logger.info('pareggio', { gameId, turno: partita.turnManager.turno });
+      logger.info('stallo', { gameId, turno: match.turnManager.turno });
       const nuovaParola = await scegliParolaIniziale(
-        partita.params.initial_length_min,
-        partita.params.initial_length_max
+        match.params.initial_length_min,
+        match.params.initial_length_max
       );
-      this.emit('pareggio', { gameId, turno: partita.turnManager.turno, nuovaParola, parola: nuovaParola });
-      partita.turnManager.nuovoTurno(nuovaParola);
-      partita.currentWord = nuovaParola;
-      partita.paroleUsate.add(normalizzaBase(nuovaParola));
-      partita.history.push({
+      this.emit('pareggio', { gameId, turno: match.turnManager.turno, nuovaParola, parola: nuovaParola });
+      match.turnManager.nuovoTurno(nuovaParola);
+      match.currentWord = nuovaParola;
+      match.paroleUsate.add(normalizzaBase(nuovaParola));
+      match.history.push({
         parola: nuovaParola,
-        giocatore: '(pareggio)',
-        turno: partita.turnManager.turno,
+        giocatore: '(stallo)',
+        turno: match.turnManager.turno,
+        manche: match.mancheCorrente,
         timestamp: Date.now(),
       });
-      // NB: NON aggiornare lastActivityAt qui: i pareggi automatici (anche con
-      // 0 socket) non devono contare come "attività", altrimenti lo sweeper non
-      // ripulisce mai una partita orfana bloccata su pareggi infiniti (regola 08).
-      // M5b-fix: turn_update con stato CORRETTO (post-pareggio) per allineare
-      // anche i client con socket.js "vecchio" (che ascoltano solo turn_update,
-      // non round_start/pareggio). Non è "stale": nuova parola e turnista sono già
-      // state impostate da nuovoTurno().
-      this.emit('turn_update', { gameId, stato: partita.turnManager.statoCorrente() });
+      // NB: NON aggiornare lastActivityAt qui: gli stalli automatici non contano
+      // come "attività" (lo sweeper ripulisce le partite orfane). turn_update
+      // invia lo stato CORRETTO post-nuovoTurno per allineare i client.
+      this.emit('turn_update', { gameId, stato: match.turnManager.statoCorrente() });
       return;
     }
 
     // Caso 2: almeno un passato → limbo eliminati
     for (const nome of limbi) {
-      const idx = partita.giocatori.indexOf(nome);
-      if (idx === -1) continue;
-      partita.giocatori.splice(idx, 1);
-      if (partita.turnManager) partita.turnManager.giocatori.splice(idx, 1);
-      this.emit('giocatore_eliminato', { gameId, nome, partita });
+      if (match.turnManager) match.turnManager.rimuoviGiocatore(nome);
+      const idx = match.giocatori.indexOf(nome);
+      if (idx !== -1) match.giocatori.splice(idx, 1);
+      this.emit('giocatore_eliminato', { gameId, nome, match });
     }
 
-    // Caso 2a: passati sono 1 solo → vince
-    if (passati.length === 1 && partita.giocatori.length === 1) {
-      this._finePartita(gameId, partita.giocatori[0]);
+    // Caso 2a: resta 1 solo → vince la manche (+1 punto, eventuale fine match)
+    if (match.giocatori.length === 1) {
+      this._fineManche(gameId, match.giocatori[0]);
       return;
     }
 
-    // Caso 2b: passati sono 2+ → continua, parola base = ultima passata
-    // (Nota: la parola valida è già stata appesa a history/paroleUsate in
-    // submitParola, quindi qui NON si pusha di nuovo per evitare duplicati.)
-    const ultimaPassata = rounds.findLast(r => r.stato === 'passato') || rounds[0];
-    const nuovaParola = ultimaPassata.parola;
-    partita.turnManager.giocatori = passati.filter(n => partita.giocatori.includes(n));
-    partita.turnManager.nuovoTurno(nuovaParola);
-    partita.currentWord = nuovaParola;
-    // lastActivityAt non viene aggiornato qui: se c'è un "passato" lo ha già
-    // fatto submitParola; così le transizioni automatiche di fine turno non
-    // contano come attività ai fini dello sweeper (partite orfane ripulite).
-    this.emit('turn_update', { gameId, stato: partita.turnManager.statoCorrente() });
+    // Caso 2b: 2+ → continua con l'ultima parola valida
+    const ultimaPassata = passatiRounds[passatiRounds.length - 1]
+      || rounds.filter(r => attivi.has(r.giocatore))[0];
+    const nuovaParola = ultimaPassata?.parola || match.currentWord;
+    match.turnManager.giocatori = [...match.giocatori];
+    match.turnManager.nuovoTurno(nuovaParola);
+    match.currentWord = nuovaParola;
+    // lastActivityAt non aggiornato qui: se c'è un "passato" lo ha già fatto
+    // submitParola; le transizioni automatiche non contano come attività.
+    this.emit('turn_update', { gameId, stato: match.turnManager.statoCorrente() });
   }
 
   /**
@@ -348,15 +385,15 @@ export class GameManager extends EventEmitter {
    * il TurnManager non emette più).
    */
   _gestisciTimeout(gameId) {
-    const partita = this.partite.get(gameId);
-    if (!partita || partita.state !== 'running') return;
+    const match = this.matches.get(gameId);
+    if (!match || match.state !== 'running') return;
     this.emit('turno_scaduto', { gameId });
   }
 
   /**
    * Elimina un giocatore da una partita in corso per qualsivoglia motivo
    * (timeout o abbandono volontario). Se resta un solo giocatore → vince;
-   * se non ne resta nessuno → partita cancellata; altrimenti il turno passa
+   * se non ne resta nessuno → match cancellata; altrimenti il turno passa
    * correttamente al successivo.
    *
    * @param {string} gameId
@@ -364,28 +401,23 @@ export class GameManager extends EventEmitter {
    * @param {'timeout'|'abbandono'} motivo
    */
   _eliminaGiocatore(gameId, idxGiocatore, motivo) {
-    const partita = this.partite.get(gameId);
-    if (!partita || partita.state !== 'running') return;
+    const match = this.matches.get(gameId);
+    if (!match || match.state !== 'running') return;
 
-    const nomeEliminato = partita.giocatori[idxGiocatore];
+    const nomeEliminato = match.giocatori[idxGiocatore];
     logger.info('giocatore_eliminato', { gameId, nome: nomeEliminato, motivo });
 
-    partita.giocatori.splice(idxGiocatore, 1);
-    if (partita.turnManager) partita.turnManager.giocatori.splice(idxGiocatore, 1);
+    // Rimozione sicura: riallinea l'indice del turno (fix bug).
+    if (match.turnManager) match.turnManager.rimuoviGiocatore(nomeEliminato);
+    const idx = match.giocatori.indexOf(nomeEliminato);
+    if (idx !== -1) match.giocatori.splice(idx, 1);
 
-    this.emit('giocatore_eliminato', { gameId, nome: nomeEliminato, partita });
+    this.emit('giocatore_eliminato', { gameId, nome: nomeEliminato, match });
 
-    if (partita.giocatori.length === 1) {
-      this._finePartita(gameId, partita.giocatori[0]);
-    } else if (partita.giocatori.length === 0) {
-      this._cancellaPartita(gameId);
-    } else {
-      const nuovoIndice = (idxGiocatore) % partita.giocatori.length;
-      partita.turnManager.currentPlayerIndex = nuovoIndice;
-      partita.turnManager.timeLeft = partita.params.turn_seconds;
-      partita.turnManager.turno += 1;
-      partita.turnManager._avviaTimer();
-      this.emit('turn_change', { gameId, stato: partita.turnManager.statoCorrente() });
+    if (match.giocatori.length === 1) {
+      this._fineManche(gameId, match.giocatori[0]);
+    } else if (match.giocatori.length === 0) {
+      this._cancellaMatch(gameId);
     }
   }
 
@@ -397,59 +429,116 @@ export class GameManager extends EventEmitter {
    * @param {string} nomeGiocatore
    */
   abbandonaGiocatore(gameId, nomeGiocatore) {
-    const partita = this.partite.get(gameId);
-    if (!partita) return { ok: false, errore: 'partita_non_trovata' };
-    if (partita.state !== 'running') return { ok: false, errore: 'partita_non_in_corso' };
+    const match = this.matches.get(gameId);
+    if (!match) return { ok: false, errore: 'partita_non_trovata' };
+    if (match.state !== 'running') return { ok: false, errore: 'partita_non_in_corso' };
 
-    const idx = partita.giocatori.indexOf(nomeGiocatore);
+    const idx = match.giocatori.indexOf(nomeGiocatore);
     if (idx === -1) return { ok: false, errore: 'giocatore_non_in_partita' };
 
-    if (partita.giocatori.length === 2) {
-      // Regola speciale: in 2 giocatori, abbandono = l'altro vince subito.
-      this._eliminaGiocatore(gameId, idx, 'abbandono');
-      return { ok: true };
-    }
+    // Best-of-N: abbandono DEFINITIVO → non rientra nelle manche successive.
+    const idxOrig = match.giocatoriOriginali.indexOf(nomeGiocatore);
+    if (idxOrig !== -1) match.giocatoriOriginali.splice(idxOrig, 1);
+    match.lastActivityAt = new Date();
 
-    // Altrimenti: marca come abbandono, ma niente _eliminaGiocatore diretto.
-    // A fine turno (_gestisciFineTurno) verrà valutato:
-    //  - se l'altro/i giocatori restanti passano il loro round → gli
-    //    abbandonati sono trattati come limbo → eliminati a fine turno.
-    //  - se nessun altro passa → pareggio.
-    //  - se dopo elim ne resta 1 solo → quello vince.
-    partita.giocatori.splice(idx, 1);
-    if (partita.turnManager) {
-      partita.turnManager.giocatori.splice(idx, 1);
-    }
-    this.emit('giocatore_eliminato', { gameId, nome: nomeGiocatore, partita });
-    // Se dopo la rimozione ne resta 1 solo, chiudi la partita subito.
-    if (partita.giocatori.length === 1) {
-      this._finePartita(gameId, partita.giocatori[0]);
-    } else if (partita.giocatori.length === 0) {
-      this._cancellaPartita(gameId);
+    // Rimozione sicura dalla manche corrente (fix indice) + segnalazione.
+    if (match.turnManager) match.turnManager.rimuoviGiocatore(nomeGiocatore);
+    const idx2 = match.giocatori.indexOf(nomeGiocatore);
+    if (idx2 !== -1) match.giocatori.splice(idx2, 1);
+    this.emit('giocatore_eliminato', { gameId, nome: nomeGiocatore, match });
+
+    if (match.giocatori.length === 1) {
+      this._fineManche(gameId, match.giocatori[0]);
+    } else if (match.giocatori.length === 0) {
+      this._cancellaMatch(gameId);
     }
     return { ok: true };
   }
 
-  _finePartita(gameId, vincitore) {
-    const partita = this.partite.get(gameId);
-    if (!partita) return;
-    partita.state = 'finished';
-    partita.vincitore = vincitore;
-    partita.endedAt = new Date();
-    partita.lastActivityAt = new Date();
-    if (partita.turnManager) partita.turnManager.stop();
-    logger.info('partita_finita', { gameId, vincitore, durata_ms: partita.endedAt - partita.startedAt, aiValidations: partita.aiValidationsCount });
-    this.emit('partita_finita', partita);
+  /**
+   * Fine di una manche: assegna +1 al vincitore, poi o chiude la partita
+   * (se raggiunge gamesToWin) oppure avvia una nuova manche.
+   * @param {string} gameId
+   * @param {string} vincitore
+   */
+  async _fineManche(gameId, vincitore) {
+    const match = this.matches.get(gameId);
+    if (!match || match.state !== 'running') return;
+
+    match.punteggio[vincitore] = (match.punteggio[vincitore] || 0) + 1;
+    const raggiunto = match.punteggio[vincitore] >= match.gamesToWin;
+    // Se resta UN SOLO giocatore non abbandonato, la partita termina comunque:
+    // non c'è più un avversario con cui giocare le manche (best-of-N).
+    const restanoGiocabili = match.giocatoriOriginali.length;
+
+    this.emit('manche_finita', {
+      gameId, vincitore, manche: match.mancheCorrente,
+      punteggio: { ...match.punteggio }, gamesToWin: match.gamesToWin, restaUnSolo: restanoGiocabili === 1,
+    });
+    this.emit('punteggio_aggiornato', { gameId, punteggio: { ...match.punteggio }, manche: match.mancheCorrente });
+
+    if (match.turnManager) match.turnManager.stop();
+    logger.info('manche_finita', { gameId, vincitore, manche: match.mancheCorrente, punti: match.punteggio[vincitore], restanoGiocabili });
+
+    if (restanoGiocabili === 1 || raggiunto) {
+      this._fineMatch(gameId, vincitore);
+    } else {
+      await this._nuovaManche(gameId);
+    }
   }
 
-  _cancellaPartita(gameId) {
-    const partita = this.partite.get(gameId);
-    if (!partita) return;
-    partita.state = 'cancelled';
-    partita.endedAt = new Date();
-    if (partita.turnManager) partita.turnManager.stop();
+  /**
+   * Avvia una NUOVA manche: tutti i giocatori non abbandonati tornano in gioco.
+   * @param {string} gameId
+   */
+  async _nuovaManche(gameId) {
+    const match = this.matches.get(gameId);
+    if (!match || match.state !== 'running') return;
+
+    const parola = await scegliParolaIniziale(
+      match.params.initial_length_min,
+      match.params.initial_length_max
+    );
+
+    match.mancheCorrente += 1;
+    match.giocatori = [...match.giocatoriOriginali];
+    match.currentWord = parola;
+    match.paroleUsate = new Set([normalizzaBase(parola)]);
+    match.history = [{ parola, giocatore: '(iniziale)', turno: 0, manche: match.mancheCorrente, timestamp: Date.now() }];
+    match.lastActivityAt = new Date();
+
+    const turnManager = this._creaTurnManager(gameId, match, parola);
+    match.turnManager = turnManager;
+    turnManager.start();
+
+    this.emit('manche_start', {
+      gameId, manche: match.mancheCorrente, parola,
+      punteggio: { ...match.punteggio }, giocatori: [...match.giocatori],
+    });
+    this.emit('turn_update', { gameId, stato: match.turnManager.statoCorrente() });
+    logger.info('nuova_manche', { gameId, manche: match.mancheCorrente, parola });
+  }
+
+  _fineMatch(gameId, vincitore) {
+    const match = this.matches.get(gameId);
+    if (!match) return;
+    match.state = 'finished';
+    match.vincitore = vincitore;
+    match.endedAt = new Date();
+    match.lastActivityAt = new Date();
+    if (match.turnManager) match.turnManager.stop();
+    logger.info('partita_finita', { gameId, vincitore, durata_ms: match.endedAt - match.startedAt, aiValidations: match.aiValidationsCount });
+    this.emit('partita_finita', match);
+  }
+
+  _cancellaMatch(gameId) {
+    const match = this.matches.get(gameId);
+    if (!match) return;
+    match.state = 'cancelled';
+    match.endedAt = new Date();
+    if (match.turnManager) match.turnManager.stop();
     logger.info('partita_cancellata', { gameId });
-    this.emit('partita_cancellata', partita);
+    this.emit('partita_cancellata', match);
   }
 
   // ============================================================
@@ -457,18 +546,18 @@ export class GameManager extends EventEmitter {
   // ============================================================
 
   registraSocket(gameId, socketId) {
-    if (!this.socketsPerPartita.has(gameId)) {
-      this.socketsPerPartita.set(gameId, new Set());
+    if (!this.socketsPerMatch.has(gameId)) {
+      this.socketsPerMatch.set(gameId, new Set());
     }
-    this.socketsPerPartita.get(gameId).add(socketId);
+    this.socketsPerMatch.get(gameId).add(socketId);
   }
 
   rimuoviSocket(gameId, socketId) {
-    this.socketsPerPartita.get(gameId)?.delete(socketId);
+    this.socketsPerMatch.get(gameId)?.delete(socketId);
   }
 
   contaSocket(gameId) {
-    return this.socketsPerPartita.get(gameId)?.size ?? 0;
+    return this.socketsPerMatch.get(gameId)?.size ?? 0;
   }
 
   // ============================================================
@@ -483,37 +572,37 @@ export class GameManager extends EventEmitter {
    */
   _sweepAbbandonate() {
     const ora = Date.now();
-    for (const [gameId, p] of this.partite.entries()) {
+    for (const [gameId, p] of this.matches.entries()) {
       if (p.state === 'waiting') {
         const etaMs = ora - new Date(p.createdAt).getTime();
         if (etaMs > TIMEOUT_WAITING_MS) {
           logger.info('sweeper_cancella_waiting', { gameId, etaMin: Math.round(etaMs / 60000) });
-          this._cancellaPartita(gameId);
+          this._cancellaMatch(gameId);
         }
       } else if (p.state === 'running') {
         const etaSenzaAttivita = ora - new Date(p.lastActivityAt).getTime();
         const socketConnessi = this.contaSocket(gameId);
         if (socketConnessi === 0 && etaSenzaAttivita > TIMEOUT_RUNNING_SOLO_MS) {
           logger.info('sweeper_cancella_running_solo', { gameId, etaMin: Math.round(etaSenzaAttivita / 60000) });
-          this._cancellaPartita(gameId);
+          this._cancellaMatch(gameId);
         }
       } else if (p.state === 'finished' || p.state === 'cancelled') {
         const etaFine = ora - new Date(p.endedAt).getTime();
         if (etaFine > TIMEOUT_FINISHED_MS) {
           logger.info('sweeper_rimuove_finita', { gameId, etaSec: Math.round(etaFine / 1000) });
-          this.rimuoviPartita(gameId);
+          this.rimuoviMatch(gameId);
         }
       }
     }
   }
 
-  rimuoviPartita(gameId) {
-    const partita = this.partite.get(gameId);
-    if (!partita) return false;
-    if (partita.state === 'running') return false;
-    if (partita.turnManager) partita.turnManager.stop();
-    this.partite.delete(gameId);
-    this.socketsPerPartita.delete(gameId);
+  rimuoviMatch(gameId) {
+    const match = this.matches.get(gameId);
+    if (!match) return false;
+    if (match.state === 'running') return false;
+    if (match.turnManager) match.turnManager.stop();
+    this.matches.delete(gameId);
+    this.socketsPerMatch.delete(gameId);
     logger.info('partita_rimossa', { gameId });
     this.emit('partita_rimossa', { id: gameId });
     return true;

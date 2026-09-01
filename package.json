@@ -19,7 +19,8 @@
     "db:import": "npm run db:import:lo && npm run db:import:hf",
     "db:check-update": "node db/check-update.mjs",
     "db:update": "node db/update-lo.mjs",
-    "db:setup": "npm run db:reset && npm run db:import"
+    "db:setup": "npm run db:reset && npm run db:import",
+    "test:e2e:browser": "playwright test"
   },
   "keywords": [
     "game",
@@ -42,6 +43,7 @@
   },
   "devDependencies": {
     "nodemon": "^3.1.9",
-    "socket.io-client": "^4.8.3"
+    "socket.io-client": "^4.8.3",
+    "@playwright/test": "^1.49.0"
   }
 }

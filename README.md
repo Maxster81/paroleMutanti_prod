@@ -15,7 +15,7 @@ Mobile-first, vanilla JS, Node.js + Express + Socket.io + PostgreSQL + DeepSeek 
 
 - 2-8 giocatori per partita, nessun account (solo nome di sessione)
 - Il server genera una parola iniziale (5-8 lettere, configurabile)
-- A ogni turno il giocatore modifica la parola precedente con UNA sola azione:
+- A ogni **mano** il giocatore modifica la parola precedente con UNA sola mossa:
   - Cambiare 1 lettera (es. `BANANA` → `BANANE`)
   - Aggiungere 1 lettera (es. `POTARE` → `PORTARE`)
   - Rimuovere 1 lettera (es. `BARARE` → `BARRE`)
@@ -24,8 +24,10 @@ Mobile-first, vanilla JS, Node.js + Express + Socket.io + PostgreSQL + DeepSeek 
   2. Forma flessa/derivata (il lemma deve esistere nel DB)
   3. Fallback AI (DeepSeek)
 - Non si può riscrivere una parola già usata nella stessa partita
-- Tempo per turno: 5-60 secondi (configurabile); chi non risponde o sbaglia viene eliminato
-- Vince l'ultimo che resta in gioco
+- **3 tentativi per mano** (5-60 secondi): al 3° errore (o a tempo scaduto) la mano si chiude
+- Se in un **turno** nessuno supera la mano → **stallo**: si riparte con una nuova parola, nessun eliminato
+- Chi resta ultimo in una **manche** vince il punto; la **partita è al meglio di N manche**
+  (`games_to_win`, 1-4): vince chi arriva a N (o chi resta da solo se gli altri abbandonano)
 
 ## 🚀 Setup di sviluppo
 

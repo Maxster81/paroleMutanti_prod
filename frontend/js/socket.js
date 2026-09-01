@@ -69,6 +69,7 @@ export function connect() {
     'turno_scaduto', 'mossa_rifiutata', 'giocatore_eliminato',
     'game_over', 'partita_cancellata', 'turn_paused', 'turn_resumed',
     'round_start', 'round_passato', 'round_limbo', 'pareggio', 'turno_finito',
+    'manche_finita', 'manche_start', 'punteggio_aggiornato',
     'errore'
   ];
   for (const ev of EVENTI) {

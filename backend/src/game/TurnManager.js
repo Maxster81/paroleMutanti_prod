@@ -27,6 +27,10 @@ export class TurnManager extends EventEmitter {
     this.onFineTurno = opzioni.onFineTurno ?? (() => {});
     this.onTick = opzioni.onTick ?? (() => {});
     this.onTimeout = opzioni.onTimeout ?? (() => {});
+    // Nomenclatura: questa classe gestisce la MANCHE. 'round' = mano,
+    // 'turno' = insieme delle mani. maxTentativi = errori per mano (3).
+    this.maxTentativi = opzioni.maxTentativi ?? 3;
+    this.tentativiCorrenti = 0;
 
     this.turno = 0;             // contatore turni (incrementa a ogni fine turno)
     this.rounds = [];           // array di risultati round del turno corrente
@@ -45,6 +49,7 @@ export class TurnManager extends EventEmitter {
     this.currentWord = this.parolaIniziale;
     this.rounds = [];
     this.currentRoundIndex = 0;
+    this.tentativiCorrenti = 0;
     this._avviaRoundCorrente();
     logger.info('turno_avviato', { turno: this.turno, parola: this.currentWord });
   }
@@ -53,6 +58,7 @@ export class TurnManager extends EventEmitter {
    * Avvia il round del giocatore corrente (timer + tick).
    */
   _avviaRoundCorrente() {
+    this.tentativiCorrenti = 0;
     this.timeLeft = this.secondiPerTurno;
     this.emit('round_start', this.statoCorrente());
     this._avviaTimer();
@@ -76,8 +82,21 @@ export class TurnManager extends EventEmitter {
       return { ok: false, valida: false, motivo: 'non_di_turno' };
     }
     if (!infoValidazione?.valida) {
-      // Mossa rifiutata: il round resta aperto, ma la parola non evolve.
-      return { ok: true, valida: false, motivo: infoValidazione?.motivo };
+      // Mossa rifiutata = un TENTATIVO fallito nella mano corrente.
+      this.tentativiCorrenti += 1;
+      const limbo = this.tentativiCorrenti >= this.maxTentativi;
+      if (limbo) {
+        // Al 3° errore la mano si chiude in limbo e si passa al successivo.
+        this.timeoutRound();
+      }
+      return {
+        ok: true,
+        valida: false,
+        motivo: infoValidazione?.motivo,
+        tentativi: this.tentativiCorrenti,
+        maxTentativi: this.maxTentativi,
+        limbo,
+      };
     }
 
     const normalizzata = infoValidazione.normalizzata || parola;
@@ -152,6 +171,50 @@ export class TurnManager extends EventEmitter {
     logger.info('turno_avviato', { turno: this.turno, parola: this.currentWord });
   }
 
+  /**
+   * Avvia una NUOVA manche (nuovo turno base, reset dell'intero stato).
+   * Tutti i giocatori (non abbandonati) tornano in gioco al completo.
+   *
+   * @param {string} nuovaParolaBase - nuova parola iniziale della manche
+   * @param {string[]} giocatori - giocatori attivi della manche (non abbandonati)
+   */
+  nuovaManche(nuovaParolaBase, giocatori) {
+    this.turno = 1;
+    this.giocatori = [...giocatori];
+    this.currentWord = nuovaParolaBase;
+    this.rounds = [];
+    this.currentRoundIndex = 0;
+    this.tentativiCorrenti = 0;
+    this.history = [];
+    this.attivo = true;
+    this._avviaRoundCorrente();
+    logger.info('manche_avviata', { turno: this.turno, parola: this.currentWord });
+  }
+
+  /**
+   * Rimuove un giocatore dalla manche corrente RIALLINEANDO correttamente
+   * l'indice del round (fix bug: prima la rimozione saltava/duplicava il
+   * turnista perché currentRoundIndex non veniva aggiornato).
+   *
+   * @param {string} nome - giocatore da rimuovere
+   * @returns {boolean} true se rimosso
+   */
+  rimuoviGiocatore(nome) {
+    const idx = this.giocatori.indexOf(nome);
+    if (idx === -1) return false;
+    if (idx < this.currentRoundIndex) {
+      // Il giocatore aveva già giocato la sua mano → scala l'indice.
+      this.currentRoundIndex -= 1;
+    }
+    this.giocatori.splice(idx, 1);
+    if (idx === this.currentRoundIndex && this.attivo) {
+      // Era il turnista corrente → salta la sua mano e avvia il successivo.
+      // (Dopo lo splice, il prossimo giocatore occupa già questo indice.)
+      this._avviaRoundCorrente();
+    }
+    return true;
+  }
+
   giocatoreCorrente() {
     return this.giocatori[this.currentRoundIndex] ?? null;
   }
@@ -170,6 +233,8 @@ export class TurnManager extends EventEmitter {
       history: this.history.map(h => ({ ...h })),
       timeLeft: Math.max(0, this.timeLeft),
       timeLimit: this.secondiPerTurno,
+      tentativi: this.tentativiCorrenti,
+      maxTentativi: this.maxTentativi,
     };
   }
 
@@ -181,6 +246,9 @@ export class TurnManager extends EventEmitter {
   _avviaTimer() {
     if (this.timerInterval) clearInterval(this.timerInterval);
     this.timerInterval = setInterval(() => this._tick(), 1000);
+    // unref: in test (senza server) il timer non deve impedire la terminazione
+    // del processo; sul server reale l'handle HTTP/socket la tiene comunque vivo.
+    this.timerInterval.unref?.();
   }
 
   _tick() {

@@ -30,6 +30,9 @@ export function renderEnd(params = {}) {
   const durataSec = partita.durataMs ? (partita.durataMs / 1000).toFixed(1) : '—';
   const turni = partita.history ? partita.history.length : 0;
   const aiCount = partita.aiValidationsCount ?? 0;
+  const punteggio = partita.punteggio || {};
+  const manche = partita.manche ?? (partita.mancheCorrente ?? 1);
+  const gamesToWin = partita.gamesToWin ?? 1;
 
   // Jingle di vittoria quando compare la schermata
   setTimeout(() => success(), 300);
@@ -40,7 +43,17 @@ export function renderEnd(params = {}) {
       <h1 class="end-title">Vince ${escapeHtml(vincitore)}!</h1>
       <p class="end-subtitle text-muted">Partita conclusa</p>
 
+      <p class="text-small text-dim" style="margin-top: 8px;">
+        🏅 ${Object.entries(punteggio).length
+          ? Object.entries(punteggio).map(([n, v]) => `${escapeHtml(n)}: ${v}`).join(' · ')
+          : `<strong>${escapeHtml(vincitore)}</strong> ha vinto la partita`}
+      </p>
+
       <div class="card end-stats">
+        <div class="end-stat">
+          <div class="end-stat-value">${manche}/${gamesToWin}</div>
+          <div class="end-stat-label">Manche</div>
+        </div>
         <div class="end-stat">
           <div class="end-stat-value">${durataSec}s</div>
           <div class="end-stat-label">Durata</div>

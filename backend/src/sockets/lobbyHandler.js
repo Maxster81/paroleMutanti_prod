@@ -36,15 +36,15 @@ const socketToGame = new Map();
  * così dopo un refresh il nuovo socket torna a ricevere i broadcast.
  *
  * @param {import('socket.io').Socket} socket - socket del client
- * @param {string} gameId - id partita
- * @param {object} partita - oggetto partita (per dedurre lo stato)
+ * @param {string} gameId - id match
+ * @param {object} match - oggetto match (per dedurre lo stato)
  */
-export function registraSocketInPartita(socket, gameId, partita) {
+export function registraSocketInPartita(socket, gameId, match) {
   socketToGame.set(socket.id, gameId);
-  const room = partita && partita.state === 'running' ? `game:${gameId}` : `lobby:${gameId}`;
+  const room = match && match.state === 'running' ? `game:${gameId}` : `lobby:${gameId}`;
   socket.join(room);
   gameManager.registraSocket(gameId, socket.id);
-  logger.info('socket_riagganciato', { socketId: socket.id, gameId, room, state: partita?.state });
+  logger.info('socket_riagganciato', { socketId: socket.id, gameId, room, state: match?.state });
 }
 
 /**
@@ -75,6 +75,11 @@ function partitaPerLobby(p) {
     parolaIniziale: p.params.initial_length_min + '-' + p.params.initial_length_max, // placeholder
     timeLeft: p.turnManager ? Math.max(0, p.turnManager.timeLeft) : null,
     turno: p.turnManager ? p.turnManager.turno : null,
+    // Best-of-N
+    manche: p.mancheCorrente ?? 0,
+    gamesToWin: p.gamesToWin ?? p.params?.games_to_win ?? 1,
+    punteggio: p.punteggio ?? {},
+    giocatoriOriginali: p.giocatoriOriginali ?? [],
   };
 }
 
@@ -90,7 +95,7 @@ export function attachLobbyHandlers(io, socket) {
 
     const { nome, maxPlayers, turnSeconds, gamesToWin, initialLengthMin, initialLengthMax } = payload || {};
 
-    const risultato = await gameManager.creaPartita({
+    const risultato = await gameManager.creaMatch({
       creator: nome,
       maxPlayers,
       turnSeconds,
@@ -104,12 +109,13 @@ export function attachLobbyHandlers(io, socket) {
       return ack?.({ ok: false, errore: risultato.errore });
     }
 
-    socketToGame.set(socket.id, risultato.partita.id);
-    socket.join(`lobby:${risultato.partita.id}`);
-    gameManager.registraSocket(risultato.partita.id, socket.id);
+    socketToGame.set(socket.id, risultato.match.id);
+    socket.join(`lobby:${risultato.match.id}`);
+    gameManager.registraSocket(risultato.match.id, socket.id);
 
-    logger.info('socket_in_partita', { socketId: socket.id, gameId: risultato.partita.id, nome });
-    ack?.({ ok: true, partita: partitaPerLobby(risultato.partita) });
+    logger.info('socket_in_partita', { socketId: socket.id, gameId: risultato.match.id, nome });
+    // Chiave wire `partita` (contratto col frontend); valore = oggetto match.
+    ack?.({ ok: true, partita: partitaPerLobby(risultato.match) });
   });
 
   // join_game
@@ -123,7 +129,7 @@ export function attachLobbyHandlers(io, socket) {
       return ack?.({ ok: false, errore: 'parametri_mancanti' });
     }
 
-    const risultato = gameManager.uniscitiAPartita(gameId, nome);
+    const risultato = gameManager.uniscitiAMatch(gameId, nome);
     if (!risultato.ok) {
       return ack?.({ ok: false, errore: risultato.errore });
     }
@@ -133,10 +139,10 @@ export function attachLobbyHandlers(io, socket) {
     gameManager.registraSocket(gameId, socket.id);
 
     // Notifica tutti nella lobby (incluso chi era già dentro)
-    broadcastAPartita(io, gameId, 'lobby_updated', partitaPerLobby(risultato.partita));
+    broadcastAPartita(io, gameId, 'lobby_updated', partitaPerLobby(risultato.match));
 
     logger.info('socket_join', { socketId: socket.id, gameId, nome });
-    ack?.({ ok: true, partita: partitaPerLobby(risultato.partita) });
+    ack?.({ ok: true, partita: partitaPerLobby(risultato.match) });
   });
 
   // leave_game
@@ -144,24 +150,24 @@ export function attachLobbyHandlers(io, socket) {
     const gameId = socketToGame.get(socket.id);
     if (!gameId) return ack?.({ ok: false, errore: 'non_in_partita' });
 
-    const partita = gameManager.getPartita(gameId);
-    if (!partita) {
+    const match = gameManager.getMatch(gameId);
+    if (!match) {
       socketToGame.delete(socket.id);
       return ack?.({ ok: false, errore: 'partita_non_trovata' });
     }
 
-    if (partita.state === 'waiting') {
-      const idx = partita.giocatori.findIndex((g) => g === payload?.nome);
+    if (match.state === 'waiting') {
+      const idx = match.giocatori.findIndex((g) => g === payload?.nome);
       if (idx !== -1) {
-        partita.giocatori.splice(idx, 1);
-        partita.ready.splice(idx, 1);
-        if (partita.giocatori.length === 0) {
-          gameManager.rimuoviPartita(gameId);
+        match.giocatori.splice(idx, 1);
+        match.ready.splice(idx, 1);
+        if (match.giocatori.length === 0) {
+          gameManager.rimuoviMatch(gameId);
         } else {
-          broadcastAPartita(io, gameId, 'lobby_updated', partitaPerLobby(partita));
+          broadcastAPartita(io, gameId, 'lobby_updated', partitaPerLobby(match));
         }
       }
-    } else if (partita.state === 'running') {
+    } else if (match.state === 'running') {
       // M5-bugfix3: abbandono durante la partita. Se resta 1 solo giocatore
       // viene decretato il vincitore (o la partita cancellata se nessuno);
       // altrimenti il turno passa correttamente al giocatore successivo.
@@ -189,15 +195,15 @@ export function attachLobbyHandlers(io, socket) {
       return ack?.({ ok: false, errore: risultato.errore });
     }
 
-    broadcastAPartita(io, gameId, 'lobby_updated', partitaPerLobby(risultato.partita));
+    broadcastAPartita(io, gameId, 'lobby_updated', partitaPerLobby(risultato.match));
 
     ack?.({ ok: true, tuttiProni: risultato.tuttiProni });
 
     // Auto-avvio se tutti pronti
     if (risultato.tuttiProni) {
-      const avvio = await gameManager.avviaPartita(gameId);
+      const avvio = await gameManager.avviaMatch(gameId);
       if (avvio.ok) {
-        const partita = avvio.partita;
+        const match = avvio.match;
         for (const [sid, gid] of socketToGame.entries()) {
           if (gid === gameId) {
             const s = io.sockets.sockets.get(sid);
@@ -206,13 +212,17 @@ export function attachLobbyHandlers(io, socket) {
               s.join(`game:${gameId}`);
               s.emit('partita_avviata', {
                 gameId,
-                parolaIniziale: partita.currentWord,
-                giocatoreCorrente: partita.turnManager.giocatoreCorrente(),
-                timeLeft: partita.turnManager.timeLeft,
-                timeLimit: partita.params.turn_seconds,
-                giocatori: partita.giocatori,
+                parolaIniziale: match.currentWord,
+                giocatoreCorrente: match.turnManager.giocatoreCorrente(),
+                timeLeft: match.turnManager.timeLeft,
+                timeLimit: match.params.turn_seconds,
+                giocatori: match.giocatori,
                 // M5c: include la catena di parole già usate per la UI
-                history: partita.history,
+                history: match.history,
+                // Best-of-N
+                manche: match.mancheCorrente,
+                gamesToWin: match.gamesToWin,
+                punteggio: match.punteggio,
               });
             }
           }
@@ -227,7 +237,7 @@ export function attachLobbyHandlers(io, socket) {
 
   // list_games
   socket.on('list_games', (payload, ack) => {
-    const partite = gameManager.listaPartiteAperte().map(partitaPerLobby);
+    const partite = gameManager.listaMatchAperti().map(partitaPerLobby);
     ack?.({ ok: true, partite });
   });
 
@@ -235,9 +245,9 @@ export function attachLobbyHandlers(io, socket) {
   socket.on('disconnect', () => {
     const gameId = socketToGame.get(socket.id);
     if (gameId) {
-      const partita = gameManager.getPartita(gameId);
-      if (partita && partita.state === 'waiting') {
-        broadcastAPartita(io, gameId, 'lobby_updated', partitaPerLobby(partita));
+      const match = gameManager.getMatch(gameId);
+      if (match && match.state === 'waiting') {
+        broadcastAPartita(io, gameId, 'lobby_updated', partitaPerLobby(match));
       }
       gameManager.rimuoviSocket(gameId, socket.id);
       socketToGame.delete(socket.id);

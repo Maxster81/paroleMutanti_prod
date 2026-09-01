@@ -250,11 +250,39 @@ socketOn('mossa_rifiutata', (data) => {
     errorBox.style.display = 'block';
     setTimeout(() => { errorBox.style.display = 'none'; }, 4000);
   }
+  // Best-of-N: aggiorna i tentativi rimasti della mano corrente.
+  const tentativiInfo = document.getElementById('tentativi-info');
+  if (tentativiInfo && typeof data.tentativi === 'number') {
+    tentativiInfo.textContent = `${Math.max(0, (data.maxTentativi ?? 3) - data.tentativi)} tentativi rimasti`;
+  }
 });
 
 socketOn('giocatore_eliminato', (data) => {
   if (data.gameId === state.get().gameId) {
     state.update({ partita: { ...state.get().partita, giocatori: data.giocatoriRimanenti } });
+    if (location.hash.startsWith('#game')) navigate('#game');
+  }
+});
+
+// Best-of-N: fine manche → aggiorna punteggio (banner re-render)
+socketOn('manche_finita', (data) => {
+  if (data.gameId === state.get().gameId) {
+    state.update({ partita: { ...state.get().partita, punteggio: data.punteggio, manche: data.manche } });
+    if (location.hash.startsWith('#game')) navigate('#game');
+  }
+});
+
+// Best-of-N: nuova manche → aggiorna parola/punteggio/giocatori
+socketOn('manche_start', (data) => {
+  if (data.gameId === state.get().gameId) {
+    state.update({ partita: { ...state.get().partita, ...data, state: 'running' } });
+    if (location.hash.startsWith('#game')) navigate('#game');
+  }
+});
+
+socketOn('punteggio_aggiornato', (data) => {
+  if (data.gameId === state.get().gameId) {
+    state.update({ partita: { ...state.get().partita, punteggio: data.punteggio, manche: data.manche } });
     if (location.hash.startsWith('#game')) navigate('#game');
   }
 });

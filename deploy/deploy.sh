@@ -109,6 +109,24 @@ require_root() {
     fi
 }
 
+# Verifica che Node sia >= 20 (requisito del progetto, vedi package.json engines).
+# Fail-fast con istruzioni chiare: evita che il deploy parta con un Node troppo
+# vecchio (es. nodejs di apt su Ubuntu è < 20) e il servizio fallisca dopo.
+require_node20() {
+    local NODE_MAJOR
+    NODE_MAJOR="$(node -v 2>/dev/null | sed 's/^v//' | cut -d. -f1)"
+    if [ -z "$NODE_MAJOR" ]; then
+        echo "ERRORE: Node non trovato. Il progetto richiede Node >= 20." >&2
+        echo "  Installa Node 20+ (NodeSource): curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt-get install -y nodejs" >&2
+        exit 1
+    fi
+    if [ "$NODE_MAJOR" -lt 20 ]; then
+        echo "ERRORE: Node $(node -v) non supportato. Il progetto richiede Node >= 20." >&2
+        echo "  Aggiorna a Node 20+: curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt-get install -y nodejs" >&2
+        exit 1
+    fi
+}
+
 # ============================================================
 # sync_code : copia SOLO i file di produzione dal clone in $DEPLOY_DIR
 # ============================================================
@@ -118,7 +136,11 @@ sync_code() {
     rsync -a --delete \
         --include='backend/' --include='backend/src/' --include='backend/src/***' \
         --include='frontend/' --include='frontend/***' \
-        --include='db/' --include='db/***' \
+        --include='db/' \
+        --exclude='db/data/' --exclude='db/data/***' \
+        --exclude='db/dumps/' --exclude='db/dumps/***' \
+        --exclude='db/.last-*' \
+        --include='db/***' \
         --include='deploy/' --include='deploy/***' \
         --include='package.json' --include='package-lock.json' \
         --include='.env.example' --include='.gitignore' \
@@ -147,6 +169,9 @@ do_install() {
     # Cartella log richiesta dall'hardening systemd (ReadWritePaths=/opt/.../logs)
     mkdir -p "$DEPLOY_DIR/logs"
     chown "$DEPLOY_USER:$DEPLOY_GROUP" "$DEPLOY_DIR/logs"
+
+    echo "[install] Verifica versione Node (>= 20 richiesto)..."
+    require_node20
 
     echo "[install] Installazione dipendenze Node (--production)..."
     (cd "$DEPLOY_DIR" && npm install --production)
@@ -295,6 +320,12 @@ do_service() {
     # Sostituisce il path env anche dentro ExecStart (per --env-file personalizzato)
     sed -i "s|/etc/parole-mutanti/.env|$ENV_FILE|g" "$SERVICE_DST"
 
+    # Usa il Node realmente installato (non l'hardcoded /usr/bin/node di apt che
+    # su Ubuntu è < 20): se si usa Node 20+ (NodeSource/nvm) il servizio lo adopera.
+    require_node20
+    NODE_BIN="$(command -v node || echo /usr/bin/node)"
+    sed -i "s|/usr/bin/node|$NODE_BIN|g" "$SERVICE_DST"
+
     # Assicura la cartella log (ReadWritePaths dell'hardening) prima di avviare
     mkdir -p "$DEPLOY_DIR/logs"
     chown "$DEPLOY_USER:$DEPLOY_GROUP" "$DEPLOY_DIR/logs"
@@ -385,6 +416,8 @@ do_update() {
     (cd "$DEPLOY_DIR" && npm install --production)
     # Applica lo schema (idempotente): crea eventuali tabelle nuove (es. feedback)
     do_schema
+    # Verifica il Node prima del restart (fail-fast se troppo vecchio)
+    require_node20
     systemctl restart parole-mutanti
     echo "[update] FATTO."
 }

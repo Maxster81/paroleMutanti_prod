@@ -31,12 +31,12 @@ export function renderHome(params = {}) {
         <ul class="home-guide-list" id="guide-list" hidden>
           <li>Da <strong>2 a 8 giocatori</strong>, nessun account: scegli un nome e crea (o unisciti a) una partita.</li>
           <li>Viene scelta una <strong>parola iniziale</strong> (5-8 lettere, configurabile).</li>
-          <li>A ogni turno modifichi la parola precedente con <strong>una sola mossa</strong>: cambia 1 lettera, aggiungi 1 lettera oppure rimuovi 1 lettera.</li>
+          <li>A ogni mano modifichi la parola precedente con <strong>una sola mossa</strong>: cambia 1 lettera, aggiungi 1 lettera oppure rimuovi 1 lettera.</li>
           <li>La parola deve essere <strong>italiana</strong>: controllo in 3 fasi (dizionario, forme flesse, supporto AI).</li>
           <li><strong>Non puoi riscrivere</strong> una parola già usata nella partita.</li>
-          <li>Hai <strong>15-60 secondi</strong> a turno: se non rispondi o sbagli, vieni eliminato.</li>
-          <li>Se tutti passano il turno, è <strong>pareggio</strong>: si riparte con una nuova parola.</li>
-          <li><strong>Vince l'ultimo che resta in gioco!</strong> 🏆</li>
+          <li>A ogni mano hai <strong>15-60 secondi</strong> e <strong>3 tentativi</strong>: al terzo errore (o a tempo scaduto) la tua mano si chiude.</li>
+          <li>Se in un turno nessuno supera la mano è <strong>stallo</strong>: si riparte con una nuova parola, nessuno viene eliminato.</li>
+          <li>Chi resta ultimo in una <strong>manche</strong> vince il punto; la partita è <strong>al meglio di N manche</strong>. 🏆</li>
         </ul>
       </div>
 

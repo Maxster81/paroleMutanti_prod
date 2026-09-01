@@ -33,6 +33,11 @@ build/
 .vite/
 coverage/
 
+# Artefatti test e2e browser (Playwright)
+test-results/
+playwright-report/
+playwright/.cache/
+
 # File temporanei IDE / OS
 .vscode/
 .idea/

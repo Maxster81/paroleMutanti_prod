@@ -28,7 +28,7 @@
     <div class="loading">Caricamento…</div>
   </main>
 
-  <!-- Socket.io client via CDN (per compatibilità moduli ES6) -->
+  <!-- Socket.io client servito same-origin dal backend (compatibile col CSP script-src 'self') -->
   <script src="/socket.io/socket.io.js"></script>
   <script type="module" src="js/main.js"></script>
 </body>
