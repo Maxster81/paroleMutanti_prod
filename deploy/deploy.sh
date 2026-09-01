@@ -133,6 +133,15 @@ require_node20() {
 # Whitelist rsync (stessa logica di sync-to-prod.sh). Se aggiungi una cartella
 # root di produzione, aggiungi qui la relativa riga --include.
 sync_code() {
+    # FAIL-FAST: se la sorgente (clone da cui si lancia lo script) NON ha
+    # package.json, NON eseguire rsync --delete: esso rimuoverebbe dal DEPLOY_DIR
+    # i file essenziali (es. /opt/paroleMutanti/package.json), distruggendo
+    # l'installazione. In tal caso il clone è stantio → serve `git pull`.
+    if [ ! -f ./package.json ]; then
+        echo "ERRORE: package.json non presente nella sorgente (pwd=$(pwd))." >&2
+        echo "  Il clone non è aggiornato: esegui 'git pull --ff-only' (o 'git reset --hard origin/main') e riprova." >&2
+        exit 1
+    fi
     rsync -a --delete \
         --include='backend/' --include='backend/src/' --include='backend/src/***' \
         --include='frontend/' --include='frontend/***' \
@@ -173,8 +182,13 @@ do_install() {
     echo "[install] Verifica versione Node (>= 20 richiesto)..."
     require_node20
 
-    echo "[install] Installazione dipendenze Node (--production)..."
-    (cd "$DEPLOY_DIR" && npm install --production)
+    # Il file package.json DEVE esistere prima di npm install
+    if [ ! -f "$DEPLOY_DIR/package.json" ]; then
+        echo "ERRORE: $DEPLOY_DIR/package.json mancante dopo la copia. Controlla che il clone sia aggiornato." >&2
+        exit 1
+    fi
+    echo "[install] Installazione dipendenze Node (--omit=dev)..."
+    (cd "$DEPLOY_DIR" && npm install --omit=dev)
 
     echo "[install] FATTO. (Il setup del database avviene dopo --env, con il passo --db)"
 }
@@ -411,9 +425,14 @@ do_update() {
         export PAROLE_REEXECED=1
         exec "$0" --update
     fi
-    echo "[update] rsync + npm install --production + schema + restart..."
+    echo "[update] rsync + npm install --omit=dev + schema + restart..."
     sync_code
-    (cd "$DEPLOY_DIR" && npm install --production)
+    # Il file package.json DEVE esistere prima di npm install
+    if [ ! -f "$DEPLOY_DIR/package.json" ]; then
+        echo "ERRORE: $DEPLOY_DIR/package.json mancante dopo la copia. Controlla che il clone sia aggiornato." >&2
+        exit 1
+    fi
+    (cd "$DEPLOY_DIR" && npm install --omit=dev)
     # Applica lo schema (idempotente): crea eventuali tabelle nuove (es. feedback)
     do_schema
     # Verifica il Node prima del restart (fail-fast se troppo vecchio)
