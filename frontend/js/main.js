@@ -173,6 +173,26 @@ socketOn('lobby_updated', (data) => {
   }
 });
 
+// Timer partenza lobby: aggiorna il countdown visibile in lobby
+socketOn('lobby_timer', (data) => {
+  if (data.gameId === state.get().gameId) {
+    state.update({ partita: { ...state.get().partita, lobbyTimerTimeLeft: data.timeLeft, lobbyTimerTot: data.tot } });
+    if (location.hash.startsWith('#lobby')) navigate('#lobby');
+  }
+});
+
+// Allo scadere del timer, chi NON era pronto viene espulso e torna alla home
+socketOn('giocatore_espulso', (data) => {
+  if (data.gameId !== state.get().gameId) return;
+  const mioNome = localStorage.getItem('pm-nome') || '';
+  if (data.nome === mioNome) {
+    alert('Non eri pronto: sei stato escluso dalla lobby.');
+    localStorage.removeItem('pm-gameId');
+    state.update({ gameId: null, partita: null });
+    navigate('#home');
+  }
+});
+
 socketOn('partita_avviata', (data) => {
   console.log('[main] partita_avviata', data);
   state.update({ partita: { ...data, state: 'running' } });

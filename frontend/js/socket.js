@@ -70,6 +70,7 @@ export function connect() {
     'game_over', 'partita_cancellata', 'turn_paused', 'turn_resumed',
     'round_start', 'round_passato', 'round_limbo', 'pareggio', 'turno_finito',
     'manche_finita', 'manche_start', 'punteggio_aggiornato',
+    'lobby_timer', 'giocatore_espulso',
     'errore'
   ];
   for (const ev of EVENTI) {

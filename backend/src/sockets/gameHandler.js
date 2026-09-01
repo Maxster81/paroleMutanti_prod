@@ -194,6 +194,14 @@ export function setupGameManagerBroadcast(io) {
     });
   });
 
+  // Timer partenza lobby (e espulsione non-pronti allo scadere)
+  gameManager.on('lobby_timer', (data) => {
+    broadcastAPartita(io, data.gameId, 'lobby_timer', data);
+  });
+  gameManager.on('giocatore_espulso', ({ gameId, nome }) => {
+    broadcastAPartita(io, gameId, 'giocatore_espulso', { gameId, nome });
+  });
+
   // Best-of-N (manche ↔ match)
   gameManager.on('manche_finita', (data) => {
     broadcastAPartita(io, data.gameId, 'manche_finita', data);

@@ -114,6 +114,13 @@ export const config = (() => {
       defaultTurnSeconds: toInt(process.env.DEFAULT_TURN_SECONDS, 30, 5, 60),
       initialWordMinLength: toInt(process.env.INITIAL_WORD_MIN_LENGTH, 5, 3, 10),
       initialWordMaxLength: toInt(process.env.INITIAL_WORD_MAX_LENGTH, 8, 3, 10),
+      // Timer partenza lobby: quando ci sono >=3 giocatori e >=2 pronti ma non tutti,
+      // al termine i non-pronti vengono espulsi e i pronti entrano in partita.
+      // Configurabile SOLO via env (NON nella UI). Sotto 10s è troppo rapido, sopra 120s inutile.
+      lobbyTimerSeconds: toInt(process.env.LOBBY_TIMER_SECONDS, 30, 10, 120),
+      // Default di visibilità di una nuova partita: pubblica (visibile in home).
+      // L'utente può scegliere "privata" al momento della creazione (flag solo alla creazione).
+      defaultPublic: toBool(process.env.DEFAULT_PUBLIC ?? 'true'),
     },
 
     // Sicurezza

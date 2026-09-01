@@ -43,8 +43,20 @@ export function renderLobby(params = {}) {
           <span class="badge ${partita.state === 'running' ? 'badge-success' : 'badge-warn'}">${partita.state || 'waiting'}</span>
           <span class="text-small text-dim">${giocatori.length}/${cfg.max_players || '?'} giocatori</span>
         </div>
-        <p class="text-small text-muted" style="margin-top: var(--spacing-sm);">👆 Tocca il codice per condividere il link della partita</p>
+        <p class="text-small text-muted" style="margin-top: var(--spacing-sm);">
+          ${partita.pubblico !== false
+            ? '🌐 Partita pubblica: visibile in home'
+            : '🔒 Partita privata: si entra solo con il codice'}
+          · 👆 Tocca il codice per condividere il link
+        </p>
       </div>
+
+      ${partita.lobbyTimerTimeLeft != null ? `
+        <div class="alert alert-info" style="margin-top: var(--spacing-md);">
+          ⏱ La partita parte tra <strong>${partita.lobbyTimerTimeLeft}</strong>s —
+          chi non è pronto verrà escluso dalla lobby.
+        </div>
+      ` : ''}
 
       <div class="card">
         <div class="players-list-title">Giocatori</div>

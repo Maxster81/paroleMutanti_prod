@@ -51,6 +51,7 @@ export class GameManager extends EventEmitter {
       gamesToWin = config.game.defaultGamesToWin,
       initialLengthMin = config.game.initialWordMinLength,
       initialLengthMax = config.game.initialWordMaxLength,
+      pubblico = config.game.defaultPublic,
     } = opzioni;
 
     if (!creator || typeof creator !== 'string' || creator.trim().length < 1) {
@@ -70,6 +71,9 @@ export class GameManager extends EventEmitter {
     if (initialLengthMin < 3 || initialLengthMax > 10 || initialLengthMin > initialLengthMax) {
       return { ok: false, errore: 'initial_length_non_valido' };
     }
+    if (typeof pubblico !== 'boolean') {
+      return { ok: false, errore: 'pubblico_non_valido' };
+    }
 
     const nome = creator.trim();
     for (const p of this.matches.values()) {
@@ -85,11 +89,16 @@ export class GameManager extends EventEmitter {
       giocatori: [nome],
       ready: [false],
       state: 'waiting',
+      pubblico,                           // pubblica = visibile in home; privata = solo via codice
       params: { max_players: maxPlayers, turn_seconds: turnSeconds, games_to_win: gamesToWin, initial_length_min: initialLengthMin, initial_length_max: initialLengthMax },
       gamesToWin,                          // best-of-N (ora effettivo)
       mancheCorrente: 1,                   // numero manche in corso
       punteggio: {},                       // nome → manche vinte
       giocatoriOriginali: [],              // chi può ancora giocare le manche successive
+      // Timer partenza lobby (>=3 giocatori e >=2 pronti ma non tutti):
+      // al termine i non-pronti vengono espulsi e la partita parte con i pronti.
+      lobbyTimer: null,                    // { interval, timeLeft, tot }
+      lobbyTimerSecondi: config.game.lobbyTimerSeconds,
       currentWord: null,
       currentPlayerIndex: 0,
       history: [],
@@ -124,6 +133,9 @@ export class GameManager extends EventEmitter {
     match.giocatori.push(nomePulito);
     match.ready.push(false);
     match.lastActivityAt = new Date();
+    // Un nuovo giocatore entra → il timer partenza (se attivo) riparte
+    // (o parte se ora la condizione è soddisfatta).
+    this._revalutaTimerLobby(gameId);
     logger.info('giocatore_aggiunto', { gameId, nome: nomePulito, totale: match.giocatori.length });
     this.emit('giocatore_aggiunto', match);
     return { ok: true, match };
@@ -139,15 +151,134 @@ export class GameManager extends EventEmitter {
     match.ready[idx] = ready;
     match.lastActivityAt = new Date();
     const tuttiProni = match.ready.every((r) => r) && match.giocatori.length >= 2;
+    // Gestione timer partenza lobby: se tutti pronti → avvio immediato
+    // (lobbyHandler farà avviaMatch); altrimenti avvia/annulla/riavvia il timer
+    // in base a numero di pronti e giocatori.
+    this._revalutaTimerLobby(gameId);
     logger.info('ready_aggiornato', { gameId, nome, ready, tuttiProni });
     this.emit('ready_aggiornato', match);
     return { ok: true, match, tuttiProni };
   }
 
+  // ─── Timer partenza lobby ────────────────────────────────────────────────
+  // Regola: se giocatori >=3 e pronti >=2 ma NON tutti, parte un countdown
+  // (lobbyTimerSecondi). Allo scadere i non-pronti vengono espulsi e la partita
+  // parte con i pronti (>=2). Se tutti diventano pronti prima → avvio immediato.
+
+  _contaPronti(match) {
+    return match.ready.filter(Boolean).length;
+  }
+
+  /**
+   * Rivaluta il timer partenza in base allo stato della lobby.
+   * @param {string} gameId
+   */
+  _revalutaTimerLobby(gameId) {
+    const match = this.matches.get(gameId);
+    if (!match || match.state !== 'waiting') {
+      this._annullaTimerLobby(gameId);
+      return;
+    }
+    const pronti = this._contaPronti(match);
+    const tutti = match.ready.every((r) => r) && match.giocatori.length >= 2;
+    if (tutti) {
+      // Tutti pronti → avvio immediato: annulla l'eventuale timer.
+      this._annullaTimerLobby(gameId);
+      return;
+    }
+    if (match.giocatori.length >= 3 && pronti >= 2) {
+      this._avviaTimerLobby(gameId); // (ri)parte da lobbyTimerSecondi
+    } else {
+      // <2 pronti o <3 giocatori → annulla il timer (partirà di nuovo quando
+      // la condizione si ristabilisce, ripartendo da 30).
+      this._annullaTimerLobby(gameId);
+    }
+  }
+
+  /**
+   * Avvia (o riavvia) il countdown di partenza lobby.
+   * @param {string} gameId
+   */
+  _avviaTimerLobby(gameId) {
+    const match = this.matches.get(gameId);
+    if (!match) return;
+    this._annullaTimerLobby(gameId);
+    const tot = match.lobbyTimerSecondi || 30;
+    const timer = { interval: null, timeLeft: tot, tot };
+    match.lobbyTimer = timer;
+    timer.interval = setInterval(() => {
+      if (match.state !== 'waiting') { this._annullaTimerLobby(gameId); return; }
+      timer.timeLeft -= 1;
+      this.emit('lobby_timer', { gameId, timeLeft: Math.max(0, timer.timeLeft), tot });
+      if (timer.timeLeft <= 0) {
+        this._scattaTimerLobby(gameId);
+      }
+    }, 1000);
+    timer.interval.unref?.();
+    this.emit('lobby_timer', { gameId, timeLeft: timer.timeLeft, tot });
+    logger.info('timer_lobby_avviato', { gameId, secondi: tot });
+  }
+
+  /**
+   * Annulla il countdown di partenza (se attivo).
+   * @param {string} gameId
+   */
+  _annullaTimerLobby(gameId) {
+    const match = this.matches.get(gameId);
+    const timer = match?.lobbyTimer;
+    if (timer?.interval) clearInterval(timer.interval);
+    if (match) match.lobbyTimer = null;
+    if (timer) {
+      this.emit('lobby_timer', { gameId, timeLeft: null, tot: 0 });
+      logger.info('timer_lobby_annullato', { gameId });
+    }
+  }
+
+  /**
+   * Allo scadere del timer: espelle i non-pronti e avvia la partita coi pronti.
+   * @param {string} gameId
+   */
+  _scattaTimerLobby(gameId) {
+    const match = this.matches.get(gameId);
+    if (!match || match.state !== 'waiting') return;
+    this._annullaTimerLobby(gameId);
+
+    // Rimuove chi NON è pronto; i pronti restano in gioco.
+    const espulsi = [];
+    for (let i = match.giocatori.length - 1; i >= 0; i--) {
+      if (!match.ready[i]) {
+        espulsi.unshift(match.giocatori[i]);
+        match.giocatori.splice(i, 1);
+        match.ready.splice(i, 1);
+      }
+    }
+    for (const nome of espulsi) {
+      this.emit('giocatore_espulso', { gameId, nome });
+      logger.info('giocatore_espulso_timer', { gameId, nome });
+    }
+
+    if (match.giocatori.length >= 2) {
+      // Avvia la partita con i pronti rimasti (tutti pronti ora).
+      this.avviaMatch(gameId).catch((err) => logger.error('avvio_da_timer_fallito', { gameId, errore: err.message }));
+    } else {
+      logger.warn('timer_lobby_senza_minimo', { gameId, giocatori: match.giocatori.length });
+    }
+  }
+
   getMatch(gameId) { return this.matches.get(gameId); }
 
-  listaMatchAperti() {
-    return Array.from(this.matches.values()).filter((p) => p.state === 'waiting');
+  /**
+   * Elenca le partite in attesa. Con `soloPubblico=true` restituisce SOLO le
+   * pubbliche (quelle visibili in home); le private restano raggiungibili solo
+   * via codice (join_game).
+   *
+   * @param {boolean} [soloPubblico=false]
+   * @returns {object[]}
+   */
+  listaMatchAperti(soloPubblico = false) {
+    return Array.from(this.matches.values())
+      .filter((p) => p.state === 'waiting')
+      .filter((p) => !soloPubblico || p.pubblico === true);
   }
 
   size() { return this.matches.size; }

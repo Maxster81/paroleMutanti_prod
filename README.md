@@ -14,6 +14,8 @@ Mobile-first, vanilla JS, Node.js + Express + Socket.io + PostgreSQL + DeepSeek 
 ## 🎯 Regole del gioco
 
 - 2-8 giocatori per partita, nessun account (solo nome di sessione)
+- Ogni partita è **pubblica** (visibile in home) o **privata** (solo via codice): decisa alla creazione.
+  In home compaiono solo le partite **pubbliche**; il default è `DEFAULT_PUBLIC` (true)
 - Il server genera una parola iniziale (5-8 lettere, configurabile)
 - A ogni **mano** il giocatore modifica la parola precedente con UNA sola mossa:
   - Cambiare 1 lettera (es. `BANANA` → `BANANE`)
@@ -28,6 +30,9 @@ Mobile-first, vanilla JS, Node.js + Express + Socket.io + PostgreSQL + DeepSeek 
 - Se in un **turno** nessuno supera la mano → **stallo**: si riparte con una nuova parola, nessun eliminato
 - Chi resta ultimo in una **manche** vince il punto; la **partita è al meglio di N manche**
   (`games_to_win`, 1-4): vince chi arriva a N (o chi resta da solo se gli altri abbandonano)
+- **Timer partenza lobby**: con **≥3 giocatori** e **≥2 pronti (ma non tutti)** parte un countdown
+  (`LOBBY_TIMER_SECONDS`, default 30s, configurabile solo via env): allo scadere i non-pronti
+  vengono esclusi e i pronti entrano in partita. Se tutti sono pronti, la partita parte subito
 
 ## 🚀 Setup di sviluppo
 

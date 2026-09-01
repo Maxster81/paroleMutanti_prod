@@ -69,6 +69,14 @@ export function renderCreate(params = {}) {
           </select>
         </div>
 
+        <div class="form-group">
+          <label class="form-label" for="input-pubblico">
+            <input type="checkbox" id="input-pubblico" name="pubblico" checked style="margin-right: 6px;">
+            🌐 Pubblica questa partita (visibile in home)
+          </label>
+          <p class="form-help">Se la togli, la partita è <strong>privata</strong>: si entra solo con il codice.</p>
+        </div>
+
         <div id="create-error" class="alert alert-error" style="display: none;"></div>
 
         <div class="form-actions">
@@ -107,6 +115,7 @@ export function attachCreateHandlers() {
       gamesToWin: parseInt(document.getElementById('input-vittorie').value, 10),
       initialLengthMin: 5,
       initialLengthMax: 6,
+      pubblico: document.getElementById('input-pubblico').checked,
     };
     const lung = document.getElementById('input-lung').value;
     if (lung === '5-8') { data.initialLengthMax = 8; }

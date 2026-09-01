@@ -48,7 +48,7 @@ export function renderHome(params = {}) {
 
       <div class="card home-list-card">
         <div class="home-list-header">
-          <span class="home-list-title">Partite aperte</span>
+          <span class="home-list-title">Partite pubbliche</span>
           <span class="home-list-meta" id="home-list-refresh">—</span>
         </div>
         <div id="games-list" class="home-list-body">
