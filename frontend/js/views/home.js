@@ -13,6 +13,7 @@
 import { navigate } from '../router.js';
 import { state } from '../state.js';
 import { emit } from '../socket.js';
+import { healthCheck } from '../api.js';
 
 const POLL_INTERVAL_MS = 5000;
 let homePollTimer = null;
@@ -65,6 +66,10 @@ export function renderHome(params = {}) {
       <a class="home-feedback" href="#feedback">
         💬 Invia un feedback
       </a>
+
+      <p class="text-small text-muted" style="margin-top: var(--spacing-md);">
+        Versione app: <span id="app-version" class="badge badge-muted">…</span>
+      </p>
     </div>
   `;
 }
@@ -94,8 +99,25 @@ export function attachHomeHandlers() {
   // Carica subito la lista
   caricaListaPartite();
 
+  // Mostra la versione dell'app (dal /health del backend)
+  caricaVersione();
+
   // Avvia polling leggero (si auto-ferma quando si lascia la home)
   avviaPolling();
+}
+
+/**
+ * Carica la versione dell'app dall'endpoint /health e la mostra in home.
+ */
+async function caricaVersione() {
+  const el = document.getElementById('app-version');
+  if (!el) return;
+  try {
+    const resp = await healthCheck();
+    el.textContent = resp?.version ? resp.version : 'n/d';
+  } catch {
+    el.textContent = 'n/d';
+  }
 }
 
 /**
