@@ -14,6 +14,7 @@ import { navigate } from '../router.js';
 import { state } from '../state.js';
 import { emit, on as socketOn } from '../socket.js';
 import { click as audioClick, tick as audioTick, buzzer, success, beep } from '../audio.js';
+import { confirmModal } from '../ui.js';
 
 let lastBeepSecond = -1;
 let verificaInCorso = false;
@@ -213,8 +214,15 @@ export function attachGameHandlers() {
     });
   });
 
-  document.getElementById('btn-leave-game')?.addEventListener('click', () => {
-    if (confirm('Vuoi abbandonare la partita?')) {
+  document.getElementById('btn-leave-game')?.addEventListener('click', async () => {
+    const esci = await confirmModal({
+      titolo: 'Abbandonare la partita?',
+      messaggio: 'Vuoi abbandonare la partita? Sei sicuro?',
+      conferma: 'Abbandona',
+      annulla: 'Annulla',
+      tone: 'danger',
+    });
+    if (esci) {
       const partita = state.get().partita;
       emit('leave_game', { nome: localStorage.getItem('pm-nome') || '' });
       state.update({ gameId: null, partita: null });

@@ -11,6 +11,7 @@ import { navigate } from '../router.js';
 import { state } from '../state.js';
 import { emit } from '../socket.js';
 import { click as audioClick, success, beep } from '../audio.js';
+import { toast, confirmModal, copyModal } from '../ui.js';
 
 export function renderLobby(params = {}) {
   const s = state.get();
@@ -133,9 +134,16 @@ export function attachLobbyHandlers() {
   }
 
   if (btnLeave) {
-    btnLeave.addEventListener('click', () => {
+    btnLeave.addEventListener('click', async () => {
       audioClick();
-      if (confirm('Vuoi davvero uscire dalla partita?')) {
+      const esci = await confirmModal({
+        titolo: 'Uscire dalla partita?',
+        messaggio: 'Vuoi davvero uscire dalla partita?',
+        conferma: 'Esci',
+        annulla: 'Annulla',
+        tone: 'danger',
+      });
+      if (esci) {
         emit('leave_game', { nome: mioNome });
         state.update({ gameId: null, partita: null });
         navigate('#home');
@@ -182,9 +190,10 @@ async function condividiPartita() {
   // Fallback: copia del link negli appunti
   try {
     await navigator.clipboard.writeText(url);
-    alert('Link della partita copiato negli appunti!\nCondividilo con i tuoi amici.');
+    toast('Link della partita copiato negli appunti!', { tipo: 'success' });
   } catch (err) {
-    prompt('Copia questo link da condividere:', url);
+    // Clipboard non disponibile → mostra il link in un modal per copia manuale.
+    await copyModal(url);
   }
 }
 

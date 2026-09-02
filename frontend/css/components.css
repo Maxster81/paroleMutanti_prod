@@ -322,3 +322,115 @@ textarea.form-input {
   margin-bottom: var(--spacing-md);
   opacity: 0.4;
 }
+
+/* ===========================================
+   Componenti custom (sostituiscono alert/confirm/prompt)
+   ui.js — toast + modal
+   =========================================== */
+
+/* --- Toast (notifiche non bloccanti) --- */
+#pm-toast-container {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: var(--spacing-lg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: 0 var(--spacing-md);
+  z-index: 1100;
+  pointer-events: none;
+}
+
+.toast {
+  max-width: 360px;
+  width: 100%;
+  padding: var(--spacing-md);
+  border-radius: var(--radius);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--text);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.22s ease, transform 0.22s ease;
+}
+
+.toast--visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.toast--success { border-color: var(--primary); }
+.toast--error   { border-color: var(--danger); }
+.toast--info    { border-color: var(--warning); }
+
+/* --- Modal overlay + box --- */
+#pm-modal-root {
+  position: relative;
+  z-index: 1050;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-md);
+  background: rgba(0, 0, 0, 0.6);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+/* Stato 'visibile' aggiunto subito dopo l'inserimento nel DOM per l'animazione. */
+.modal-overlay:not(.modal-overlay--chiudo) { opacity: 1; }
+
+.modal-overlay--chiudo { opacity: 0; }
+
+.modal {
+  width: 100%;
+  max-width: 420px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: var(--spacing-lg);
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.modal-overlay:not(.modal-overlay--chiudo) .modal {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.modal__header {
+  margin-bottom: var(--spacing-sm);
+}
+
+.modal__title {
+  font-size: var(--font-size-lg);
+  color: var(--text);
+}
+
+.modal__body {
+  margin-bottom: var(--spacing-lg);
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.modal__actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  justify-content: flex-end;
+}
+
+.modal__actions .btn {
+  flex: 1;
+  min-height: 44px; /* touch-friendly */
+}

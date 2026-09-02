@@ -13,6 +13,7 @@
 import { state } from './state.js';
 import { connect as socketConnect, on as socketOn, onReconnect, emit, getSocket } from './socket.js';
 import { click as audioClick, beep, tick as audioTick } from './audio.js';
+import { toast } from './ui.js';
 import { healthCheck } from './api.js';
 import { route, start as routerStart, onRouteChange, navigate } from './router.js';
 
@@ -186,7 +187,7 @@ socketOn('giocatore_espulso', (data) => {
   if (data.gameId !== state.get().gameId) return;
   const mioNome = localStorage.getItem('pm-nome') || '';
   if (data.nome === mioNome) {
-    alert('Non eri pronto: sei stato escluso dalla lobby.');
+    toast('Non eri pronto: sei stato escluso dalla lobby.', { tipo: 'error' });
     localStorage.removeItem('pm-gameId');
     state.update({ gameId: null, partita: null });
     navigate('#home');
@@ -314,7 +315,7 @@ socketOn('game_over', (data) => {
 });
 
 socketOn('partita_cancellata', () => {
-  alert('La partita è stata cancellata');
+  toast('La partita è stata cancellata', { tipo: 'info' });
   state.update({ gameId: null, partita: null });
   navigate('#home');
 });
@@ -374,7 +375,7 @@ async function tentaRipristinoPartita() {
     const timeout = setTimeout(() => {
       console.warn('[main] timeout ripristino partita');
       nascondiOverlay();
-      alert('Connessione lenta, riprova più tardi');
+      toast('Connessione lenta, riprova più tardi', { tipo: 'error' });
       localStorage.removeItem('pm-gameId');
       state.update({ gameId: null, partita: null });
       routerStart();
@@ -386,8 +387,8 @@ async function tentaRipristinoPartita() {
       nascondiOverlay();
       if (!resp || !resp.ok || !resp.stato) {
         console.log('[main] partita non recuperabile:', resp?.errore || 'risposta vuota');
-        // M5-bugfix2: alert chiaro + pulizia + vai a home
-        alert(`La partita ${gameIdSalvato.slice(0, 8)}… non esiste più sul server.\nVerrai reindirizzato alla home.`);
+        // M5-bugfix2: toast chiaro + pulizia + vai a home
+        toast(`La partita ${gameIdSalvato.slice(0, 8)}… non esiste più sul server. Verrai reindirizzato alla home.`, { tipo: 'error' });
         localStorage.removeItem('pm-gameId');
         state.update({ gameId: null, partita: null });
         navigate('#home');
